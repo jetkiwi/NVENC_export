@@ -61,7 +61,7 @@
 #include "CNvEncoder.h"
 
 #ifndef SDK_FILE_CURRENT_VERSION	
-#define SDK_FILE_CURRENT_VERSION	33			// The current file version number. When making a change
+#define SDK_FILE_CURRENT_VERSION	34			// The current file version number. When making a change
 												// to the file structure, increment this value.
 #endif
 #define SDK_FILETYPE				'SDK_'		// The four character code for our filetype
@@ -86,7 +86,7 @@
 #define SDK_10_BIT_YUV_NAME			L"Uncompressed 10-bit YUV (v410)"
 #define	SDK_RLE_NAME				L"RLE Compressed 8-bit RGB"
 
-#define	SDK_NAME					"NVidia NVENC Beta SDK 3.0 (Aug 2013) Exporter"	// This string is used in the file header
+#define	SDK_NAME					"NVidia NVENC SDK 3.0 (Dec 2013) Exporter"	// This string is used in the file header
 #define	SDK_CLSS					'DTEK'		// ClassID four character code, used in the Editing Mode XML
 
 // Codec (subtype) fourCCs
@@ -250,6 +250,11 @@ typedef struct ExportSettings
 	PrPixelFormat				requested_PixelFormat0; // user-requested Pixelformat, must be initialized to
 														// a valid format
 	PrPixelFormat				rendered_PixelFormat0;  // the actual Pixelformat Adobe chose to render frame#0
+
+	// Status the encode-session (spawned by the Adobe Premiere app)
+	bool                        video_encode_fatalerr;  // status, video-encode operation suffered a fatal
+														// unrecoverable error.  (This causes nvenc_export
+														// to skip subsequent audio-encoding and muxing.)
 } ExportSettings;
 
 

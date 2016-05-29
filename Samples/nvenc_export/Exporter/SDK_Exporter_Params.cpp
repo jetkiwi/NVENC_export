@@ -176,8 +176,9 @@ NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s)
 	os << "<< It is not supported by Adobe or NVidia in any way! >>" << std::endl;
 	os << std::endl;
 	os << "NVENC_export Build date: " <<  __DATE__ << " " << __TIME__ << std::endl;
-	os << "NVIDIA NVENC SDK 3.0 Beta (Aug 2013), API 0x" << std::hex << NVENCAPI_VERSION 
-	   << std::endl << std::endl;
+	os << SDK_NAME << ", NVENC API version " << std::dec << NVENCAPI_MAJOR_VERSION 
+		<< "." << std::dec << NVENCAPI_MINOR_VERSION << std::endl << std::endl;
+
 	QUERY_PRINT_CAP(NV_ENC_CAPS_NUM_MAX_BFRAMES);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_FIELD_ENCODING);
@@ -209,7 +210,7 @@ NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s)
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_PREPROC_SUPPORT);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
-	//QUERY_PRINT_CAP(NV_ENC_CAPS_MB_NUM_MAX); // broken in 320.79 driver
+	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_NUM_MAX); // broken in 320.79 driver, works in 334.89 WHQL driver
 
 /*
 	for(unsigned i = 0; i < m_dwInputFmtCount; ++i ) {
@@ -263,6 +264,7 @@ uint32_t NVENC_Calculate_H264_MaxKBitRate(
 	// NVENC SDK 2.0 Beta, Geforce 314.14 driver
 	//    For some reason, the NVENC's high-profile bitrate-constraints appear 
 	//    to follow the values for baseline/main profile.
+	// Note, this is still true as of NVENC SDK 3 (Geforce 334.89 WHQL driver)
 
 
 //	if ( (profile >= NV_ENC_H264_PROFILE_BASELINE) &&
@@ -430,9 +432,10 @@ NVENC_Calculate_H264_MaxRefFrames(
 	// -----------
 	// NVENC SDK 2.0 Beta and Geforce 314.14 drivers (02/2013)
 	//   at 4k resolution, NVENC crashes if ref_frames > 2
-
-	if ( (pixels > (1920 * 1080)) && (r > 2) )
-		r = 2;
+	// Update: NVENC SDK 3.0, with Geforce 334.89 WHQL (02/2014),
+	//   at 4k resolution, this restriction is gone.
+//	if ( (pixels > (1920 * 1080)) && (r > 2) )
+//		r = 2;
 
 	return r;
 }
@@ -644,15 +647,15 @@ prMALError exSDKGenerateDefaultParams(
 	//  If more than 1 Nvidia GPU is installed in the system,
 	//  then the index can greater than 0.
 
-	// kludge: Scan for available NVidia GPUs,
-	//    If possible, pick a default GPU that supports NVENC capability
+	//    Scan for available NVidia GPUs,
+	//    then, pick the lowest# GPU that supports NVENC capability
 	std::vector<NvEncoderGPUInfo_s> gpulist;
 	unsigned int numGPUs = update_exportParamSuite_GPUSelectGroup_GPUIndex(exporterPluginID, lRec, gpulist);
 	unsigned int default_GPUIndex = 0;
 
 	for(unsigned int i = 0; i < numGPUs; ++i)
 		if ( gpulist[i].nvenc_supported ) {
-			default_GPUIndex = i; // found an NVENC capable GPU
+			default_GPUIndex = i; // found an NVENC capable GPU, use this one
 			break;
 		}
 
@@ -851,21 +854,9 @@ prMALError exSDKGenerateDefaultParams(
 	// this param was leftover from the SDK sample code, don't need it anymore
 	//Add_NVENC_Param_int( ADBEVideoCodecGroup, ADBEVideoCodec, 0, 0, SDK_8_BIT_RGB)
 
+	// Button: 'codec info' 
 	Add_NVENC_Param_button( ADBEVideoCodecGroup, ADBEVideoCodecPrefsButton, exParamFlag_none );
-/*
-	exNewParamInfo codecButtonParam;
-	safeStrCpy(codecButtonParam.identifier, 256, ADBEVideoCodecPrefsButton);
-	codecButtonParam.paramType = exParamType_button;
-	codecButtonParam.flags = exParamFlag_none;
-	codecButtonParam.paramValues.disabled = kPrFalse;
-	codecButtonParam.paramValues.hidden = kPrFalse;
-	codecButtonParam.paramValues.arbData = 0;
-	codecButtonParam.paramValues.arbDataSize = sizeof(CodecSettings);
-	exportParamSuite->AddParam(	exporterPluginID,
-									mgroupIndex,
-									ADBEVideoCodecGroup,
-									&codecButtonParam);
-*/
+
 	// Basic Video Param Group
 	Add_NVENC_Param_Group( ADBEBasicVideoGroup, GroupName_BasicVideo, ADBEVideoTabGroup );
 
@@ -1029,6 +1020,12 @@ prMALError exSDKGenerateDefaultParams(
 
 using namespace std;
 
+//
+// NE_GetGPUList() : scan system for installed NVidia GPUs, return them in a list
+//     Argument: vector<> gpulist       List of detected GPUs (with their properties)
+//
+//     Return value: # detected NVidia GPUs
+//
 unsigned
 NE_GetGPUList( std::vector<NvEncoderGPUInfo_s> &gpulist )
 {
@@ -1038,9 +1035,9 @@ NE_GetGPUList( std::vector<NvEncoderGPUInfo_s> &gpulist )
 	CUcontext cuContext = 0;
 
     char gpu_name[100];
-	int  major, minor;  // CUDA capability (major), CUDA capability (minor)
-    int  deviceCount = 0;
-    int  NVENC_devices = 0;
+	int  major, minor;     // CUDA capability (major), CUDA capability (minor)
+    int  deviceCount = 0;  // Number of detected NVidia GPUs
+    int  NVENC_devices = 0;// Number of NVENC-capable NVidia GPUs
 
 	gpulist.clear();
     log_printf("\n");
@@ -1136,7 +1133,6 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 													0,
 													ParamID_GPUSelect_GPUIndex);
-//	std::vector<EncoderGPUInfo_s> gpulist;
 	csSDK_int32 numGPUs = NE_GetGPUList( gpulist );
 	for (csSDK_int32 i = 0; i < gpulist.size(); i++)
 	{
@@ -1191,7 +1187,7 @@ void update_exportParamSuite_GPUSelectGroup(
 	
 
 	//
-	//  GPU VRAM: report the VRAM on the currently selected board
+	//  GPU VRAM: report the selected GPU's video RAM size
 	//
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 													0,
@@ -1222,6 +1218,9 @@ void update_exportParamSuite_GPUSelectGroup(
 		);
 	}
 
+	//
+	// GPU Compute Capability level
+	//
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 		0,
 		ParamID_GPUSelect_Report_CCAP);
@@ -1251,6 +1250,9 @@ void update_exportParamSuite_GPUSelectGroup(
 		);
 	}
 
+	//
+	// GPU driver "CUDA version"
+	//
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 		0,
 		ParamID_GPUSelect_Report_DV);
@@ -2123,7 +2125,10 @@ const wchar_t * const	frameRateStrings[]	= {
 	L"48",
 	L"50 (PAL)",
 	L"59.94 (NTSC)",
-	L"60"
+	L"60",
+	L"100",
+	L"119.88",
+	L"120",
 };
 
 PrTime			frameRates[ sizeof(frameRateStrings) / sizeof(frameRateStrings[0]) ];
@@ -2140,7 +2145,10 @@ const PrTime	frameRateNumDens[][2]={
 	{48, 1},
 	{50, 1},
 	{60000, 1001},
-	{60, 1}
+	{60, 1},
+	{100, 1},
+	{120000, 1001},
+	{120, 1}
 };
 
 const wchar_t * const ADBEVMCMux_TypeStrings[] = {
@@ -2322,22 +2330,28 @@ to use the user-selected colorimetry (Bt601 or Bt709)");
 	NVENC_SetParamName(lRec, exID, ADBEAudioBitrate, 
 		L"Bitrate [kbps]",	L"Encoded AAC audio bitrate (in kilo bits per second)\nuse 192 for stereo, and 384 for 5.1-surround)");
 
-
 	//
 	//  GPUIndex : NVidia GPU selector (user-adjustable)
 	//
 	std::vector<NvEncoderGPUInfo_s> gpulist;
 	csSDK_int32 numGPUs = update_exportParamSuite_GPUSelectGroup_GPUIndex( exID, lRec, gpulist);
 
+	// get the current user-selection for GPUIndex, and perform a range-check on it
+	exParamValues GPUIndexValue;
+	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_GPUSelect_GPUIndex, &GPUIndexValue);
+	int           GPUIndex = GPUIndexValue.value.intValue;
+	if ( GPUIndex >= numGPUs) 
+		GPUIndex = numGPUs - 1;// out of range
+
 	//
 	// Create the read-only section of the GPU-group.
 	//
 	// The 'read-only' entries simply report information back to the user, and cannot be changed.
-	lRec->NvGPUInfo = gpulist[0];
+	lRec->NvGPUInfo = gpulist[GPUIndex];
 	update_exportParamSuite_GPUSelectGroup(
 		exID,		// exporterID
 		lRec,		// ExportSettings
-		(numGPUs>0) ? 0 : -1,	// select which NVidia GPU to use
+		GPUIndex,	// select which NVidia GPU to use
 		lRec->NvGPUInfo
 	);
 
@@ -2836,8 +2850,9 @@ prMALError exSDKParamButton(
 	#endif
 	const csSDK_int32		exID		= getFilePrefsRecP->exporterPluginID;
 	PrSDKExportParamSuite	*paramSuite	= lRec->exportParamSuite;
-	HWND mainWnd = lRec->windowSuite->GetMainWindow();
-	csSDK_int32		mgroupIndex = 0;
+	HWND mainWnd                        = lRec->windowSuite->GetMainWindow();
+	csSDK_int32		mgroupIndex         = 0;
+
 	enum {
 		button_nvenc_info = 0,
 		button_tsmuxer,
@@ -3088,22 +3103,23 @@ exSDKValidateParamChanged (
 	prMALError				result			= malNoError;
 	csSDK_uint32			exID			= validateParamChangedRecP->exporterPluginID;
 	ExportSettings			*lRec			= reinterpret_cast<ExportSettings*>(validateParamChangedRecP->privateData);
-	exParamValues			GPUIndexValue, changedValue;
+	exParamValues			changedValue;
 
 	if (!lRec->exportParamSuite)
 		return exportReturn_ErrMemory;
 
 
 	bool UI_GPUIndex_changed = strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_GPUSelect_GPUIndex) == 0;
-	// kludge: always rescan for NVidia GPUs
+
+	// kludge: always rescan the system for NVidia GPUs
 	std::vector<NvEncoderGPUInfo_s> gpulist;
 	unsigned int numGPUs = update_exportParamSuite_GPUSelectGroup_GPUIndex(exID, lRec, gpulist);
 
 	lRec->exportParamSuite->GetParamValue(exID,
 		validateParamChangedRecP->multiGroupIndex,
 		ParamID_GPUSelect_GPUIndex,
-		&GPUIndexValue);
-	int GPUIndex_unv = GPUIndexValue.value.intValue; // unvalidated GPUIndex
+		&changedValue);
+	int GPUIndex_unv = changedValue.value.intValue; // unvalidated GPUIndex
 	int GPUIndex     = GPUIndex_unv;
 
 	// GET the changed parameter (changedValue)
@@ -3125,9 +3141,8 @@ exSDKValidateParamChanged (
 		GPUIndex = numGPUs - 1;  // ceiling (GPUIndex selected a GPU# that no longer exists)
 
 	//
-	// Note, the following if/else tree doesn't function as expected...
-	//   It seems that the first (if) executes most of the time, and the remaining else/if's
-	//   don't always get evaluated when a parameter-change notification comes in.
+	// If the GPUIndex changed (either due to user or system-update), then
+	// update the GPUSelect group (which shows the readout of name/vram/cc)
 	//
 	if ( UI_GPUIndex_changed || (GPUIndex != GPUIndex_unv) )
 	{
@@ -3145,20 +3160,20 @@ exSDKValidateParamChanged (
 			GPUIndex,	// select which NVidia GPU to use
 			lRec->NvGPUInfo
 		);
+
+		// In case the NVENC capabilities changed, update everything
 		update_exportParamSuite_NVENCCfgGroup( exID, lRec );
 		update_exportParamSuite_VideoGroup( exID, lRec );
 	}
-	else if ((strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_CODEC) == 0) ||
+
+	// Sometimes the if/else tree doesn't work as expected - 
+	//   It seems that the first (if) executes most of the time, and the remaining else/if's
+	//   don't always get evaluated when a parameter-change notification comes in.
+	if ((strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_CODEC) == 0) ||
 		(strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_PRESET) == 0) ||
 		(strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_H264_PROFILE) == 0) ||
 		(strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_LEVEL_H264) == 0) )
 	{
-		update_exportParamSuite_GPUSelectGroup(
-			exID,		// exporterID
-			lRec,		// ExportSettings
-			GPUIndex,	// select which NVidia GPU to use
-			lRec->NvGPUInfo
-		);
 		update_exportParamSuite_NVENCCfgGroup( exID, lRec );
 		update_exportParamSuite_VideoGroup( exID, lRec );
 	}
@@ -3410,17 +3425,25 @@ exSDKValidateOutputSettings( // used by selector exSelValidateOutputSettings
 	return malNoError; // NVENC is supported
 }
 
+// NVENC_ExportSettings_to_EncodeConfig():
+// ---------------------------------------
+// When starts the 'encode' operation from the Adobe user-interface,
+// Adobe spawns a new expoerter-instance, and none of the exporter's 
+// user-defined vars are set.  This function copies the GUI selections
+// from Adobe's param-interface, into nvenc_exporter's Encoder config-struct.
+//
 prSuiteError
 NVENC_ExportSettings_to_EncodeConfig(
 	const csSDK_uint32 exID,
 	ExportSettings * const lRec
 )
 {
-	exParamValues paramValue;
+	exParamValues paramValue;// temporary var
 	if ( lRec == NULL )
 		return exportReturn_ErrMemory;
 
 	EncodeConfig *config = &(lRec->NvEncodeConfig);
+	HWND mainWnd         = lRec->windowSuite->GetMainWindow();
 
 #define _AdobeParamToEncodeConfig(adobe_param,adobe_type,nvenc_param,nvenc_type) \
 	lRec->exportParamSuite->GetParamValue(exID, 0, adobe_param, &paramValue), \
@@ -3429,7 +3452,15 @@ NVENC_ExportSettings_to_EncodeConfig(
 #define _AdobeBitRateToEncodeConfig(adobe_param,nvenc_param,nvenc_type) \
 	lRec->exportParamSuite->GetParamValue(exID, 0, adobe_param, &paramValue), \
 	config->##nvenc_param = static_cast<nvenc_type>( paramValue.value.floatValue*1000000.0 )
-	
+
+	// Set the var 'lRec->NvGPUInfo.device', which controls which NVidia GPU will be
+	// used to perform the video-encode.
+	std::vector<NvEncoderGPUInfo_s> gpulist;
+	const csSDK_int32 numGPUs = NE_GetGPUList( gpulist );// scan system for NVidia GPUs
+	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_GPUSelect_GPUIndex, &paramValue);
+	const int GPUIndex       = (numGPUs > paramValue.value.intValue) ? paramValue.value.intValue : 0;
+	lRec->NvGPUInfo.device   = gpulist[ GPUIndex ].device;
+
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_CODEC, intValue, codec, NvEncodeCompressionStd );
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_PRESET, intValue, preset, int );
 

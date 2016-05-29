@@ -1200,7 +1200,9 @@ HRESULT CNvEncoder::GetPresetConfig(const int iPresetIdx)
 			nvStatus = m_pEncodeAPI->nvEncGetEncodePresetConfig(m_hEncoder, m_stEncodeGUID, m_stCodecPresetGUIDArray[i], &m_stPresetConfig);
 			if (nvStatus == NV_ENC_SUCCESS)
 			{
-				m_stPresetGUID = m_stCodecPresetGUIDArray[iPresetIdx];
+				m_stPresetIdx  = iPresetIdx;
+				m_stPresetGUID = m_stCodecPresetGUIDArray[m_stPresetIdx];
+
 				break;
 			}
 			else if ( iPresetIdx != 0 )

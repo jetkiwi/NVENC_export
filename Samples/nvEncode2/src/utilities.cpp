@@ -31,20 +31,20 @@ void printHelp()
 
     printf("> Encoder Test Application Parameters\n");
     printf(" <<Required Parameters>>\n");
-    printf("   [-infile=input.yuv]    YUV420 input filenmae for encoding\n");
-    printf("   [-outfile=output.264]  Output H.264 Video filename\n");
-    printf("   [-width=n]             Width  of video source (i.e. n = (704, 1280, 1920))\n");
-    printf("   [-height=n]            Height of video source (i.e. n = (480,  720, 1080))\n");
+    printf("   [-infile=input.mp4]    MPEG bitstream input (*.MP4, *.TS, *.M2TS)\n");
+    printf("   [-outfile=output.264]  Output elementary-stream H.264 Video filename\n");
+//  printf("   [-width=n]             Width  of video source (i.e. n = (704, 1280, 1920))\n");
+//  printf("   [-height=n]            Height of video source (i.e. n = (480,  720, 1080))\n");
     printf(" <<Optional Parameters>>\n");
-	printf("   [-use_gpuid=n]         Choose which GPU to run perform encoder (default==0) \n");
+	printf("   [-use_gpuid=n]         Choose which GPU-device to run perform encoder (default==0) \n");
 	printf("   [-useall_gpus]         Selects *ALL* GPUs to perform encoding (default==no) \n");
-    printf("   [-darwidth=n]          DisplayAspectRatio Width \n");
-    printf("   [-darheight=n]         DisplayAspectRatio Height\n");
-    printf("   [-device=n]            Override display GPU device that is used to create an Encoder context.\n");
+    printf("   [-darwidth=n]          DisplayAspectRatio Width  (default=infile's)\n");
+    printf("   [-darheight=n]         DisplayAspectRatio Height (default=infile's)\n");
+//    printf("   [-device=n]            Override display GPU device that is used to create an Encoder context.\n");
     printf("   [-psnr=out_psnr.txt]   Output File Peak SNR\n");
-    printf("   [-interface=n]         0=DX9, 1=DX11, 2=CUDA, 3=DX10\n");
+    printf("   [-interface=n]         0=DX9, 1=DX11, 2=CUDA, 3=DX10 (default=2, don't change)\n");
     printf("   [-showCaps]            Display NVENC Hardware Capabilities detected\n");
-    printf("   [-syncMode=n]          1=Enable Asynchronous Mode, Windows OS only\n");
+//  printf("   [-syncMode=n]          1=Enable Asynchronous Mode, Windows OS only\n");// always in async-mode
     printf("   {-useMappedResources]  Enable NVENC buffer interop with DirectX or CUDA\n"); 
     printf("   [-maxNumberEncoders=n] n=number of encoders to use when multiple GPUs are detected\n");
     printf("\n\n");
@@ -89,45 +89,37 @@ void printHelp()
     printf("   [-svcTemporal=n]    SVC Temporal (1=enable, 0=disable)\n");
     printf("   [-numlayers=n]      Number of layers for SVC (requires flag -svcTemporal=1) \n");
     printf("   [-outbandspspps=n]  Outband SPSPPS (1=enable, 0=disable)\n");
-    printf("   [-mvc=n]            MultiView Codec (1=enable, 0=disable)\n");
+//  printf("   [-mvc=n]            MultiView Codec (1=enable, 0=disable)\n");// not supported
     printf("   [-profile=n]        H.264 Codec Profile (n=profile #)\n");
     printf("                           66  = (Baseline)\n");
     printf("                           77  = (Main Profile)\n");
     printf("                           100 = (High Profile)\n");
     printf("                           128 = (Stereo Profile)\n");
-    printf("   [-stereo3dMode=n]   Stereo Mode Packing Mode\n");
-    printf("                          0 = No Stereo Packing\n");
-    printf("                          1 = Checkerboard\n");
-    printf("                          2 = Column Interleave\n");
-    printf("                          3 = Row Interleave\n");
-    printf("                          4 = Side by Side\n");
-    printf("                          5 = Top-Bottom\n");
-    printf("                          6 = Frame Sequential\n");
-    printf("   [-stereo3dEnable=n] 3D Stereo (1=enable, 0=disable)\n");
+//    printf("   [-stereo3dMode=n]   Stereo Mode Packing Mode\n");
+//    printf("                          0 = No Stereo Packing\n");
+//    printf("                          1 = Checkerboard\n");
+//    printf("                          2 = Column Interleave\n");
+//    printf("                          3 = Row Interleave\n");
+//    printf("                          4 = Side by Side\n");
+//    printf("                          5 = Top-Bottom\n");
+//    printf("                          6 = Frame Sequential\n");
+//  printf("   [-stereo3dEnable=n] 3D Stereo (1=enable, 0=disable)\n");// not supported
     printf("   [-numslices=n]      Specify Number of Slices to be encoded per Frame\n");
     printf("   [-preset=n]         Specify the encoding preset\n");
     printf("                         -1 = No preset\n");
     printf("                          0 = Default\n");
-    printf("                          1 = Video Conferencing\n");
-    printf("                          2 = Wireless Display (WiDi)\n");
-    printf("                          3 = High Performance\n");
-    printf("                          4 = High Quality\n");
-    printf("                          5 = Camera\n");
-    printf("                          6 = BluRay\n");
-    printf("                          7 = AVCHD (H.264)\n");
-    printf("                          8 = IPOD\n");
-    printf("                          9 = Sony PSP\n");
-    printf("                         10 = Game Capture Preset\n");
-    printf("                         11 = Game Capture 720p60\n");
-    printf("                         12 = Game Capture 720p30\n");
-    printf("                         13 = Desktop capture\n");
-    printf("                         14 = MVC stereo\n");
+    printf("                          1 = Low Latency Default\n");
+    printf("                          2 = High Performance\n");
+    printf("                          3 = High Quality\n");
+    printf("                          4 = BluRay\n");
+    printf("                          5 = Low Latency High Quality (HQ)\n");
+    printf("                          6 = Low Latency High Performance (HP)\n");
     printf("   [-disableCodecCfg=n] Disabling codec config allows the application to pick up the parameters\n");
     printf("                          0 = Codec specific parameter is provided by application.\n");
     printf("                          1 = Required if using manual NVENC parameter settings\n");
     printf("   [-fieldmode=n]     Field Encoding Mode (0=Frame, 2=Field, 3=MBAFF)\n"); 
     printf("   [-maxNumRefFrames=n] Reference Frames (1..4: if Bframes enabled must be >= 2)\n");
-    printf("   [-mvprecision=n]   Motion Vector Precision  \n"); 
+    printf("   [-mvprecision=n]   Motion Vector Precision (1=full, 2=half, 3=quarter pixel) \n"); 
     printf("   [-enableFMO=n]     FMO Mode (0=Autoselect, 1=Enabled, 2=Disabled)\n"); 
     printf("   [-outputseiBufferPeriod=n]\n"); 
     printf("   [-outputseiPictureTime=n]\n"); 
@@ -141,8 +133,8 @@ void printHelp()
     printf("   [-adaptiveTransformMode=n]  Adaptive Transform 8x8 mode (0=Autoselect, 1=Disabled, 2=Disabled)\n\n"); 
     printf("   [-disabledeblocking]\n");
     printf("   [-disablePTD]\n"); 
-    printf("   [-dynamicResChange]     (Enable Dynamic Resolution Changes)\n"); 
-    printf("   [-dynamicBitrateChange] (Enable Dynamic Bitrate Changes)\n"); 
+//    printf("   [-dynamicResChange]     (Enable Dynamic Resolution Changes)\n"); 
+//    printf("   [-dynamicBitrateChange] (Enable Dynamic Bitrate Changes)\n"); 
     printf("   [-enableVFR]            (Enable Variable Frame Rate Mode)\n"); 
 	printf("   [-vbvBufferSize=n]      (default==0)\n");
 	printf("   [-vbvInitialDelay=n]    (default==0)\n");
@@ -188,7 +180,7 @@ void initEncoderParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_nvEnc
         p_nvEncoderConfig->qpI              = 25;
         p_nvEncoderConfig->qpP              = 28;
         p_nvEncoderConfig->qpB              = 31;
-        p_nvEncoderConfig->preset           = NV_ENC_PRESET_HP; // set to high performance mode
+        p_nvEncoderConfig->preset           = NV_ENC_PRESET_BD; // set to Bluray disc
         p_nvEncoderConfig->disableCodecCfg  = 0;
         p_nvEncoderConfig->profile          = NV_ENC_H264_PROFILE_HIGH; // 66=baseline, 77=main, 100=high, 128=stereo (need to also set stereo3d bits below)
         p_nvEncoderConfig->stereo3dEnable   = 0;

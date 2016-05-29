@@ -1,3 +1,9 @@
+// nvEncodeAPI.h from Dec 2013 NVENC 3.0 SDK
+// local patches:
+//	rename NV_ENC_VP8_GUID -> NV_ENC_VP8_PROFILE_GUID
+//	rename NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY -> NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY_GUID
+//	uncomment #include<stdint.h>
+
 /*
  * Copyright 1993-2013 NVIDIA Corporation.  All rights reserved.
  *
@@ -137,7 +143,9 @@ typedef void* NV_ENC_REGISTERED_PTR;        /**< A Resource that has beenr egist
 /**
  * NvEncodeAPI interface Version Definition.
  */
-#define  NVENCAPI_VERSION  0x30
+#define NVENCAPI_MAJOR_VERSION 3
+#define NVENCAPI_MINOR_VERSION 0
+#define NVENCAPI_VERSION ((NVENCAPI_MAJOR_VERSION << 4) | (NVENCAPI_MINOR_VERSION))
 
 /**
  * Macro to generate per-structure version for use with API.
@@ -666,8 +674,6 @@ typedef enum _NV_ENC_STEREO_PACKING_MODE
     NV_ENC_STEREO_PACKING_MODE_TOPBOTTOM        = 0x5,  /**< Top-Bottom mode for packing stereo frames */
     NV_ENC_STEREO_PACKING_MODE_FRAMESEQ         = 0x6   /**< Frame Sequential mode for packing stereo frames */
 } NV_ENC_STEREO_PACKING_MODE;
-
-/**
 
 /**
  *  Input Resource type
@@ -2953,6 +2959,7 @@ NVENCSTATUS NVENCAPI NvEncUnregisterResource                    (void* encoder, 
  * \param [in] encoder
  *   Pointer to the NVEncodeAPI interface.
  *
+ *    Pointer to a ::NV_ENC_INITIALIZE_PARAMS structure.
  * \param [in] reInitEncodeParams
  *    Pointer to a ::NV_ENC_RECONFIGURE_PARAMS structure.
  * \return

@@ -164,8 +164,9 @@ unsigned int checkNumberEncoders(EncoderGPUInfo *encoderInfo)
             checkCudaErrors(cuDeviceGet(&cuDevice, currentDevice));
             checkCudaErrors(cuDeviceGetName(gpu_name, 100, cuDevice));
             checkCudaErrors(cuDeviceComputeCapability(&SMmajor, &SMminor, currentDevice));
-            printf("  [ GPU #%d - < %s > has Compute SM %d.%d, NVENC %s ]\n", 
+            printf("  [ GPU #%d - < %s > has Compute SM %d.%d, NVENC %0u.%0u API is %s ]\n", 
                             currentDevice, gpu_name, SMmajor, SMminor, 
+							NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION,
                             (((SMmajor << 4) + SMminor) >= 0x30) ? "Available" : "Not Available");
 
             if (((SMmajor << 4) + SMminor) >= 0x30)
@@ -183,18 +184,19 @@ unsigned int checkNumberEncoders(EncoderGPUInfo *encoderInfo)
 // Main Console Application for NVENC
 int main(const int argc, char *argv[])
 {
-    CUVIDEOFORMAT inCuvideoformat; // input-file's format information
+	CUVIDEOFORMAT inCuvideoformat[MAX_ENCODERS]; // input-file's format information
     NV_ENC_CONFIG_H264_VUI_PARAMETERS vui; // Encoder's video-usability struct (for color info)
 	NVENCSTATUS nvencstatus = NV_ENC_SUCCESS; // OpenEncodeSession() return code
-    FILE *fOutput[MAX_ENCODERS];
+	FILE *fOutput[MAX_ENCODERS] = {NULL};
     int retval        = 1;
 
-    CNvEncoder     *pEncoder[MAX_ENCODERS];
+	CNvEncoder     *pEncoder[MAX_ENCODERS] = {NULL};
     EncodeConfig   nvEncoderConfig[MAX_ENCODERS];
     EncoderGPUInfo encoderInfo[MAX_ENCODERS];
 
     EncoderAppParams nvAppEncoderParams = {0};
-    videoDecode *pVideoDecode[MAX_ENCODERS];
+	videoDecode *pVideoDecode[MAX_ENCODERS] = {NULL};
+	string       output_filename_strings[MAX_ENCODERS];
 
 //    int          botFieldFirst    = 0;
     int          filename_length  = 0;
@@ -211,10 +213,13 @@ int main(const int argc, char *argv[])
 
     memset(&nvEncoderConfig, 0 , sizeof(EncodeConfig)*MAX_ENCODERS);
     memset(&vui, 0, sizeof(NV_ENC_CONFIG_H264_VUI_PARAMETERS));
+	memset(inCuvideoformat, 0, sizeof(inCuvideoformat));
+	memset(fOutput, NULL, sizeof(fOutput));
 
     // Initialize Encoder Configurations
 	pprintf("calling initEncoderParams()\n");
     initEncoderParams(&nvAppEncoderParams, &nvEncoderConfig[0]);
+	nvAppEncoderParams.maxNumberEncoders = 16;// bandaid, most likely no one is running with more than 16 gpus
     
     // Find out the source-video's characteristics (format, size, frame-rate, etc.)
 	//
@@ -222,19 +227,19 @@ int main(const int argc, char *argv[])
 	pVideoDecode[0] = new videoDecode(argc, argv);
 	pVideoDecode[0]->parseCommandLineArguments(); // set videoDecode's input-filename
 
-    pVideoDecode[0]->loadVideoSource( &inCuvideoformat );
+    pVideoDecode[0]->loadVideoSource( &inCuvideoformat[0] );
 
 
-    nvEncoderConfig[0].width = inCuvideoformat.display_area.right - inCuvideoformat.display_area.left; 
-    nvEncoderConfig[0].height= inCuvideoformat.display_area.bottom- inCuvideoformat.display_area.top;
-    nvEncoderConfig[0].maxHeight = inCuvideoformat.coded_height; // nvEncoderConfig[0].height;
-    nvEncoderConfig[0].maxWidth  = inCuvideoformat.coded_width; // nvEncoderConfig[0].width;
-    nvEncoderConfig[0].darRatioX = inCuvideoformat.display_aspect_ratio.x;
-    nvEncoderConfig[0].darRatioY = inCuvideoformat.display_aspect_ratio.y;
+    nvEncoderConfig[0].width = inCuvideoformat[0].display_area.right - inCuvideoformat[0].display_area.left; 
+    nvEncoderConfig[0].height= inCuvideoformat[0].display_area.bottom- inCuvideoformat[0].display_area.top;
+    nvEncoderConfig[0].maxHeight = inCuvideoformat[0].coded_height; // nvEncoderConfig[0].height;
+    nvEncoderConfig[0].maxWidth  = inCuvideoformat[0].coded_width; // nvEncoderConfig[0].width;
+    nvEncoderConfig[0].darRatioX = inCuvideoformat[0].display_aspect_ratio.x;
+    nvEncoderConfig[0].darRatioY = inCuvideoformat[0].display_aspect_ratio.y;
 
-    nvEncoderConfig[0].frameRateDen = inCuvideoformat.frame_rate.denominator;
-    nvEncoderConfig[0].frameRateNum = inCuvideoformat.frame_rate.numerator;
-    nvEncoderConfig[0].FieldEncoding = inCuvideoformat.progressive_sequence ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME : NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
+    nvEncoderConfig[0].frameRateDen = inCuvideoformat[0].frame_rate.denominator;
+    nvEncoderConfig[0].frameRateNum = inCuvideoformat[0].frame_rate.numerator;
+    nvEncoderConfig[0].FieldEncoding = inCuvideoformat[0].progressive_sequence ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME : NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
     //nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_PL;
 	nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_TILED64x16;
 
@@ -297,7 +302,7 @@ int main(const int argc, char *argv[])
 	//  command-line argument "-gpuid=<x>" chooses one gpuID.
 
 	use_gpuid = 0; // default GPUID (if none specified on command-line)
-	getCmdLineArgumentValue ( argc, (const char **)argv, "gpuid", &use_gpuid );
+	getCmdLineArgumentValue ( argc, (const char **)argv, "use_gpuid", &use_gpuid );
 	encoder_disable_mask[use_gpuid] = false; // turn on the user-selected GPU
 
 	// optional, turn on ALL gpus
@@ -324,6 +329,10 @@ int main(const int argc, char *argv[])
 
 		pVideoDecode[encoderID] = new videoDecode(argc, argv);
 		pVideoDecode[encoderID]->parseCommandLineArguments(); // set videoDecode's input-filename
+
+		// note, only inCuvideoformat[0] is used, we discard inCuvideoformat[i] returned by
+		// all the other encoderIDs (1..xx)
+	    pVideoDecode[encoderID]->loadVideoSource( &inCuvideoformat[encoderID] );
 	}
 
     // Depending on the number of available encoders and the maximum encoders, we open multiple FILEs (one per GPU)
@@ -353,6 +362,9 @@ int main(const int argc, char *argv[])
         output_filename[extension_index-1] = '\0';
         sprintf(output_filename, "%s.gpu%d.%s", output_filename, encoderID, output_ext);
 
+		// remember this encoder's output filename (need this to pritn end-of-run stats)
+		output_filename_strings[encoderID] = output_filename;
+
 		pprintf("Checkpoint loop3\n");
         fOutput[encoderID] = fopen(output_filename, "wb+");
         if (!fOutput[encoderID])
@@ -367,11 +379,11 @@ int main(const int argc, char *argv[])
     //   identifies the exact colorspace geometry (eg. BT-709)
     if ( 1 )  { // ( inCuvideoformat.video_signal_description.video_format < 5 )
         vui.videoSignalTypePresentFlag = 1;
-        vui.videoFormat = inCuvideoformat.video_signal_description.video_format;
+        vui.videoFormat = inCuvideoformat[0].video_signal_description.video_format;
         vui.colourDescriptionPresentFlag = 1;
-        vui.colourMatrix = inCuvideoformat.video_signal_description.matrix_coefficients;
-        vui.colourPrimaries = inCuvideoformat.video_signal_description.color_primaries;
-        vui.transferCharacteristics = inCuvideoformat.video_signal_description.transfer_characteristics;
+        vui.colourMatrix = inCuvideoformat[0].video_signal_description.matrix_coefficients;
+        vui.colourPrimaries = inCuvideoformat[0].video_signal_description.color_primaries;
+        vui.transferCharacteristics = inCuvideoformat[0].video_signal_description.transfer_characteristics;
     }
 
     // Create the H.264 Encoder instances
@@ -669,6 +681,11 @@ int main(const int argc, char *argv[])
     for (unsigned int encoderID=0; encoderID < numEncoders; encoderID++) 
     {
 		unsigned int numFramesToEncode;
+
+		// if this encoder isn't enabled, skip to the next one
+		if ( encoder_disable_mask[encoderID] == true )
+			continue;// skip to next encoder
+
 	    // update the numFrames to the *actual* number of frames we decoded, so that the statistics print out correctly.
 	    if ( nvAppEncoderParams.numFramesToEncode > pVideoDecode[encoderID]->GetFrameDecodeCount() )
 			numFramesToEncode = pVideoDecode[encoderID]->GetFrameDecodeCount();
@@ -691,11 +708,21 @@ int main(const int argc, char *argv[])
             fclose(fOutput[encoderID]);
 
             char output_filename[256];
-            sprintf(output_filename, "%s.gpu%d.%s", nvAppEncoderParams.output_base_file, encoderID, nvAppEncoderParams.output_base_ext);
+            strcpy( output_filename, output_filename_strings[encoderID].c_str() );
 
             fOutput[encoderID] = fopen(output_filename, "rb");
+			if ( fOutput[encoderID] == NULL ) {
+				pprintf("  ERROR, unable to re-open encoded output (output_filename: %s)\n", output_filename );
+				continue; // skip to next encoder
+			}
+
 //          fseek(fOutput[encoderID], 0, SEEK_END);
-            _fseeki64(fOutput[encoderID], 0, SEEK_END);
+            int rc = _fseeki64(fOutput[encoderID], 0, SEEK_END);
+			if ( fOutput[encoderID] == NULL ) {
+				pprintf("  ERROR, unable to seek to end of file (output_filename: %s)\n", output_filename );
+				continue; // skip to next encoder
+			}
+
             __int64 file_size = _ftelli64(fOutput[encoderID]);
             fclose(fOutput[encoderID]);
             printf("  OutputFile[%d] <%s>\n", encoderID, output_filename);
@@ -715,14 +742,14 @@ int main(const int argc, char *argv[])
             yuv[i] = NULL;
         }
     }
-
+/*
     for (unsigned int encoderID=0; encoderID < numEncoders; encoderID++) 
     {
         char output_filename[256];
         sprintf(output_filename, "%s.gpu%d.%s", nvAppEncoderParams.output_base_file, encoderID, nvAppEncoderParams.output_base_ext);
         printf("\nNVENC completed encoding H.264 video, saved as <%s> \n", output_filename);
     }
-
+*/
     for (unsigned int i=0; i < numEncoders; i++)
     {
         if (pEncoder[i])

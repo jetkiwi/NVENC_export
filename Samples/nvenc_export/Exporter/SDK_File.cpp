@@ -57,7 +57,7 @@
 #include <Windows.h> // SetFilePointer(), WriteFile()
 #include <sstream>  // ostringstream
 #include <cstdio>
-
+bool Check_prSuiteError( const prSuiteError errval, string &str );
 typedef union {
 	uint32_t  dword[1];
 	uint16_t  word[2];
@@ -1076,6 +1076,7 @@ prMALError RenderAndWriteVideoFrame(
 	const PrTime				videoTime,
 	exDoExportRec				*exportInfoP)
 {
+	string						errstr; // error-string
 	csSDK_int32					resultS					= malNoError;
 	csSDK_uint32				exID					= exportInfoP->exporterPluginID;
 	ExportSettings				*mySettings = reinterpret_cast<ExportSettings *>(exportInfoP->privateData);
@@ -1093,6 +1094,7 @@ prMALError RenderAndWriteVideoFrame(
 								*f32BufferP				= NULL,
 								*frameNoPaddingP		= NULL,
 								*v410Buffer				= NULL;
+	HWND mainWnd                        = mySettings->windowSuite->GetMainWindow();
 	SequenceRender_ParamsRec renderParms;
 	//PrPixelFormat pixelFormats[] = {PrPixelFormat_BGRA_4444_8u, PrPixelFormat_BGRA_4444_8u};
 	PrPixelFormat *pixelFormats = NULL;
@@ -1180,9 +1182,82 @@ prMALError RenderAndWriteVideoFrame(
 					kRenderCacheType_None,	// [TODO] Try different settings
 					&renderResult);
 
+		if ( PrSuiteErrorFailed(resultS) ) {
+			ostringstream o;
+			PrParam		hasVideo, seqWidth, seqHeight;
+
+			Check_prSuiteError(resultS, errstr );
+			o << __FILE__ << "(" << std::dec << __LINE__ << "): ";
+			o << "There was a problem with exporting video." << std::endl;
+			o << "On frame#0, RenderVideoFrame() failed with error-value: " << errstr;
+
+			// 2 problems:
+			// -----------
+			// (1) Checking the source-video and framesize here doesn't work, because
+			//     Adobe presents a exportInfoSuite with modified properties that are
+			//     'conformed' to the user-selected output-size. 
+
+			// (2) In Premeire CS6 and CC, if CUDA hardware-acceleration is enabled,
+			//     Adobe's video-renderer will refuse to resize Pixelformat YUV.
+			//     (It seems that packed-pixel RGB 32bpp is the only format natively
+			//      resized by the CUDA-accelerated MPE.)
+			mySettings->exportInfoSuite->GetExportSourceInfo( exID,
+											kExportInfo_SourceHasVideo,
+											&hasVideo);
+			mySettings->exportInfoSuite->GetExportSourceInfo( exID,
+											kExportInfo_VideoWidth,
+											&seqWidth);
+			mySettings->exportInfoSuite->GetExportSourceInfo( exID,
+											kExportInfo_VideoHeight,
+											&seqHeight);/*
+			if ( (hasVideo.mBool == kPrTrue) && 
+				 ((seqWidth.mInt32 != renderParms.inWidth ) ||
+				  (seqHeight.mInt32 != renderParms.inHeight )) )
+			{
+*/
+			// 
+				o << std::endl << std::endl;
+				o << "If CUDA hardware-acceleration is enabled, Adobe may fail to resize the video." << std::endl;
+				o << "Either disable acceleration, or change the chosen output-size to match " << std::endl;
+				o << "the source's size ( " << std::dec << renderParms.inWidth << " x " << std::dec;
+				o << renderParms.inHeight << " )" << std::endl;
+/*				
+				acceleratio Source video_width / height = " << std::dec << seqWidth.mInt32
+				  << " / " << std::dec << seqHeight.mInt32 << std::endl;
+				o << "Output video_width / height = " << std::dec << renderParms.inWidth
+				  << " / " << std::dec << renderParms.inHeight << std::endl;
+				o << "NVENC_export cannot resize the source-video.  Please change the output video size to match the source size!";
+*/
+//			} 
+
+			MessageBox(	GetLastActivePopup(mainWnd),
+				o.str().c_str(),
+				EXPORTER_NAME,
+				MB_ICONERROR
+			);
+
+			return resultS;
+		} // PrSuiteErrorFailed
+
 		// Record the pixelFormat of the 1st frame of output. 
 		// (NVENC-plugin will lock the remainder of the video-render to this format.)
-		mySettings->ppixSuite->GetPixelFormat(renderResult.outFrame, &renderedPixelFormat);
+		resultS = mySettings->ppixSuite->GetPixelFormat(renderResult.outFrame, &renderedPixelFormat);
+		if ( PrSuiteErrorFailed(resultS) ) {
+			ostringstream o;
+
+			Check_prSuiteError(resultS, errstr );
+			o << __FILE__ << "(" << std::dec << __LINE__ << "): ";
+			o << "GetPixelFormat failed with error-value: " << errstr;
+			o << std::endl;
+			MessageBox(	GetLastActivePopup(mainWnd),
+				o.str().c_str(),
+				EXPORTER_NAME,
+				MB_ICONERROR
+			);
+
+			return resultS;
+		}
+
 		mySettings->rendered_PixelFormat0 = renderedPixelFormat;
 	} 
 	else {
@@ -1195,6 +1270,7 @@ prMALError RenderAndWriteVideoFrame(
 					kRenderCacheType_None,	// [TODO] Try different settings
 					mySettings->rendered_PixelFormat0, // *force* all remaining frames to the same PrPixelForamt
 					&renderResult);
+		Check_prSuiteError(resultS, errstr );
 	}
 
 //	renderedPixelSize = GetPixelFormatSize(renderedPixelFormat);
@@ -2130,4 +2206,197 @@ void safeWcscat (wchar_t *destStr, int size, const wchar_t *srcStr)
 #elif defined PRMAC_ENV
 	wcscat (destStr, srcStr);
 #endif
+}
+
+bool Check_prSuiteError( const prSuiteError errval, string &str )
+{
+	ostringstream oss;
+	bool   found_error = true;
+	str.clear();
+
+	// top of error-check
+	if ( PrSuiteErrorSucceeded(errval) )
+		return false;
+
+#define case_prSuiteError_VALUE(e) case e : str = #e; break
+
+	switch( errval ) {
+		//case_prSuiteError_VALUE(suiteError_NoError);	// Method succeeded
+/*
+**	General error results.
+*/
+		case_prSuiteError_VALUE(suiteError_Fail				);	// Method failed
+		case_prSuiteError_VALUE(suiteError_InvalidParms		);	// A parameter to this method is invalid
+		case_prSuiteError_VALUE(suiteError_OutOfMemory		);	// There is not enough memory to complete this method
+		case_prSuiteError_VALUE(suiteError_InvalidCall		);	// Usually this means this method call is not appropriate at this time
+		case_prSuiteError_VALUE(suiteError_NotImplemented	);	// The requested action is not implemented
+		case_prSuiteError_VALUE(suiteError_IDNotValid		);	// The passed in ID (pluginID, clipID...) is not valid
+
+
+/*
+**	RenderSuite results
+*/
+
+/*	<private>
+**	RenderSuite ErrorCategory == 1
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_RenderPending				);	// Render is pending
+		case_prSuiteError_VALUE(suiteError_RenderedFrameNotFound		);	// A cached frame was not found.
+		case_prSuiteError_VALUE(suiteError_RenderedFrameCanceled		);	// A render was canceled
+
+		case_prSuiteError_VALUE(suiteError_RenderInvalidPixelFormat		);	// Render output pixel format list is invalid
+		case_prSuiteError_VALUE(suiteError_RenderCompletionProcNotSet	);	// The render completion proc was not set for an async request
+
+/*
+**	TimeSuite results
+*/
+
+/*	<private>
+**	TimeSuite ErrorCategory == 2
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_TimeRoundedAudioRate			);	// Audio rate returned was rounded
+
+/*
+**	Compiler{Render,Audio,Settings}Suite results
+**
+**	NOTE: If this list is changed in any way, you must also
+**	update:
+**
+**	1.) SuiteErrorToCompilerError() and CompilerErrorToSuiteError()
+**		in \Plugins\MediaCommon\MediaUtils\Src\Compilers\CompilerErrorUtils.cpp
+**	2.)	CompilerErrorToSuiteError() in \MediaLayer\Src\Compilers\CompilerModuleCallbacks.cpp
+*/
+
+/*	<private>
+**	Compiler{Render,Audio,Settings}Suite ErrorCategory == 3
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_CompilerCompileAbort				);	// User aborted the compile
+		case_prSuiteError_VALUE(suiteError_CompilerCompileDone				);	// Compile finished normally
+		case_prSuiteError_VALUE(suiteError_CompilerOutputFormatAccept		);	// The output format is valid
+		case_prSuiteError_VALUE(suiteError_CompilerOutputFormatDecline		);	// The compile module cannot compile to the output format
+		case_prSuiteError_VALUE(suiteError_CompilerRebuildCutList			);	// Return value from compGetFilePrefs used to force Premiere to bebuild its cutlist
+		case_prSuiteError_VALUE(suiteError_CompilerIterateCompiler			);	// 6.0 Return value from compInit to request compiler iteration
+		case_prSuiteError_VALUE(suiteError_CompilerIterateCompilerDone		);	// 6.0 Return value from compInit to indicate there are no more compilers
+		case_prSuiteError_VALUE(suiteError_CompilerInternalErrorSilent		);	// 6.0 Silent error code; Premiere will not display an error message on screen.
+																					// Compilers can return this error code from compDoCompile if they wish to
+																					// put their own customized error message on screen just before returning 
+																					// control to Premiere
+		case_prSuiteError_VALUE(suiteError_CompilerIterateCompilerCacheable );	// 7.0 Return value from compInit to request compiler iteration and indicating that this
+																					// compiler is cacheable.
+
+		case_prSuiteError_VALUE(suiteError_CompilerBadFormatIndex			);	// Invalid format index - used to stop compGetIndFormat queries
+		case_prSuiteError_VALUE(suiteError_CompilerInternalError			);	// 
+		case_prSuiteError_VALUE(suiteError_CompilerOutOfDiskSpace			);	// Out of disk space error
+		case_prSuiteError_VALUE(suiteError_CompilerBufferFull				);	// The offset into the audio buffer would overflow it
+		case_prSuiteError_VALUE(suiteError_CompilerErrOther					);	// Someone set gCompileErr
+		case_prSuiteError_VALUE(suiteError_CompilerErrMemory				);	// Ran out of memory
+		case_prSuiteError_VALUE(suiteError_CompilerErrFileNotFound			);	// File not found
+		case_prSuiteError_VALUE(suiteError_CompilerErrTooManyOpenFiles		);	// Too many open files
+		case_prSuiteError_VALUE(suiteError_CompilerErrPermErr				);	// Permission violation
+		case_prSuiteError_VALUE(suiteError_CompilerErrOpenErr				);	// Unable to open the file
+		case_prSuiteError_VALUE(suiteError_CompilerErrInvalidDrive			);	// Drive isn't valid.
+		case_prSuiteError_VALUE(suiteError_CompilerErrDupFile				);	// Duplicate Filename
+		case_prSuiteError_VALUE(suiteError_CompilerErrIo					);	// File io error
+		case_prSuiteError_VALUE(suiteError_CompilerErrInUse					);	// File is in use
+		case_prSuiteError_VALUE(suiteError_CompilerErrCodecBadInput			);	// A video codec refused the input format
+		case_prSuiteError_VALUE(suiteError_ExporterSuspended				);	// The host has suspended the export
+		case_prSuiteError_VALUE(suiteError_ExporterNoMoreFrames			);	// Halt export early skipping all remaining frames including this one. AE uses
+
+/*
+**	FileSuite results
+*/
+
+/*	<private>
+**	FileSuite ErrorCategory == 4
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_FileBufferTooSmall			);
+		case_prSuiteError_VALUE(suiteError_FileNotImportableFileType	);	// Not an importable file type
+
+/*
+**	LegacySuite results
+*/
+
+/*	<private>
+**	LegacySuite ErrorCategory == 5
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_LegacyInvalidVideoRate		);	// Invalid video rate (scale and sample rate don't match a valid rate)
+
+/*
+**	PlayModuleAudioSuite results
+*/
+
+/*	<private>
+**	PlayModuleAudioSuite ErrorCategory == 6
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_PlayModuleAudioInitFailure			);
+		case_prSuiteError_VALUE(suiteError_PlayModuleAudioIllegalPlaySetting	);
+		case_prSuiteError_VALUE(suiteError_PlayModuleAudioNotInitialized		);
+		case_prSuiteError_VALUE(suiteError_PlayModuleAudioNotStarted			);
+		case_prSuiteError_VALUE(suiteError_PlayModuleAudioIllegalAction			);
+
+/*
+**	PlayModuleDeviceControlSuite
+*/
+
+/*	<private>
+**	PlayModuleDeviceControlSuite ErrorCategory == 7
+**	</private>
+*/
+		case_prSuiteError_VALUE(suiteError_PlayModuleDeviceControlSuiteIllegalCallSequence	);
+
+/*
+**	MediaAcceleratorSuite ErrorCategory == 8
+*/
+		case_prSuiteError_VALUE(suiteError_MediaAcceleratorSuitePathNotFound	);
+		case_prSuiteError_VALUE(suiteError_MediaAcceleratorSuiteRegisterFailure	);
+
+
+/*
+**	Royalty Activation ErrorCategory == 9
+*/
+		case_prSuiteError_VALUE(suiteError_RepositoryReadFailed					);
+		case_prSuiteError_VALUE(suiteError_RepositoryWriteFailed				);
+		case_prSuiteError_VALUE(suiteError_NotActivated							);
+		case_prSuiteError_VALUE(suiteError_DataNotPresent						);
+		case_prSuiteError_VALUE(suiteError_ServerCommunicationFailed			);
+		case_prSuiteError_VALUE(suiteError_Internal								);
+
+/*
+**	PrSDKStringSuite ErrorCategory == A
+*/
+		case_prSuiteError_VALUE(suiteError_StringNotFound						);
+		case_prSuiteError_VALUE(suiteError_StringBufferTooSmall					);
+
+
+/*
+**	PrSDKVideoSegmentSuite ErrorCategory == B
+*/
+		case_prSuiteError_VALUE(suiteError_NoKeyframeAfterInTime				);
+
+/*
+**	PrSDKCaptioningSuite ErrorCategory == C
+*/
+		case_prSuiteError_VALUE(suiteError_NoMoreData							);
+
+/*
+**	PrSDKThreadedWorkSuite ErrorCategory == D
+*/
+		case_prSuiteError_VALUE(suiteError_InstanceDestroyed					);
+
+		default:
+			oss << "Unknown:" << std::hex << errval;
+			str.clear();
+			found_error = false;
+	} // switch( errval )
+
+	if ( errval == suiteError_NoError )
+		found_error = false;
+
+	return found_error;
 }

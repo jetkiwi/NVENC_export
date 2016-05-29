@@ -735,7 +735,8 @@ public: // temp-hack
     unsigned int                                         m_dwCodecProfileGUIDCount; // List of Encoding Profiles (base, main, high ,etc.)
     GUID                                                 m_stCodecProfileGUID;// profile choice (H264: base, main, high, etc.)
     GUID                                                *m_stCodecProfileGUIDArray;
-    GUID                                                 m_stPresetGUID;     // preset choice
+    unsigned int                                         m_stPresetIdx;      // encoding preset (index#)
+    GUID                                                 m_stPresetGUID;     // encoding preset choice
     unsigned int                                         m_encodersAvailable;
     unsigned int                                         m_dwInputFmtCount;
     NV_ENC_BUFFER_FORMAT                                *m_pAvailableSurfaceFmts; // input framebuffer formats (NV12, Y444, etc.)

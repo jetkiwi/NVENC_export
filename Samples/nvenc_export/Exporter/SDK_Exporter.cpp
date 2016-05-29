@@ -1361,7 +1361,6 @@ prMALError RenderAndWriteAllVideo(
 	PrTime			segmentEnd;
 	prtPlaycode		playcode;
 	//PrClipID		clipID;
-	csSDK_int32		numPixelFormats = 0;
 	//ClipFrameFormat	frameFormat;
 	//PPixHand		tempFrame;
 
@@ -1451,6 +1450,7 @@ prMALError RenderAndWriteAllVideo(
 	
 	// Since the endTime can fall in between frames, make sure to not include any fractional trailing frames
 	bool is_frame0 = true; // flag, is this the first frame being rendered?
+	bool encoded_at_least_1 = false;// status, we successfully encoded at least 1 frame
 	bool pre11_suppress_messages = false; // workaround for Premiere Elements 11, don't call ReportEvent
 
 	// kludge for Premiere Elements 11 - don't call ReportEventA() when running on PRE11
@@ -1515,6 +1515,7 @@ prMALError RenderAndWriteAllVideo(
 
 		// If an error occurred during video-rendering, halt the render.
 		if ( result != malNoError ) {
+			mySettings->video_encode_fatalerr = true;// video-encode fatal failure
 			break; // halt the render (abort the for-loop)
 		}
 
@@ -1530,7 +1531,7 @@ prMALError RenderAndWriteAllVideo(
 			os << "Video Frame#0 info: Adobe rendered_PixelFormat0 = 0x"
 				<< std::hex << mySettings->rendered_PixelFormat0 << " '";
 			for( unsigned i = 0; i < 4; ++i )
-				os << static_cast<unsigned char>((adobe_selected_prpixelformat >> (i<<3)) & 0xFFU);
+				os <<  (static_cast<char>((adobe_selected_prpixelformat >> (i<<3)) & 0xFFU));
 			os << "'" << std::endl;
 			copyConvertStringLiteralIntoUTF16( os.str().c_str(), eventDesc);
 			// Did Adobe-app accept or reject our requested YUV PrPixelFormat?
@@ -1602,10 +1603,15 @@ prMALError RenderAndWriteAllVideo(
 				exportInfoP	// plugin internal data-struct (p_nvEncoder object)
 			);
 
-			// If an error occurred during video-rendering, halt the render.
-			if ( result != malNoError ) {
+			// If the first frame failed to render, then this is a fatal error condition.
+			// Set the fatal-flag (to signal the remainder of nvenc_export to quit),
+			// and halt render now.
+			if ( PrSuiteErrorFailed(result) ) {
+				mySettings->video_encode_fatalerr = true;// video-encode fatal failure
 				break; // halt the render (abort the for-loop)
 			}
+			else
+				encoded_at_least_1 = true;
 		} // if ( is_frame0 && !UsePushMode)
 
 		if ( is_frame0 && UsePushMode ) {
@@ -1656,7 +1662,7 @@ prMALError RenderAndWriteAllVideo(
 				exID, PrSDKErrorSuite3::kEventTypeWarning, eventTitle, eventDesc
 			);
 
-			mySettings->exporterUtilitySuite->DoMultiPassExportLoop(
+			result = mySettings->exporterUtilitySuite->DoMultiPassExportLoop(
 				exID,
 				&ep,
 				1,
@@ -1665,6 +1671,7 @@ prMALError RenderAndWriteAllVideo(
 			);
 			
 			// done with encoding the entire video-sequence!  Now break out of the for-loop()
+			encoded_at_least_1 = true;
 			is_frame0 = false;
 			break;
 		} // if ( is_frame0 && UsePushMode )
@@ -1696,8 +1703,10 @@ prMALError RenderAndWriteAllVideo(
 	// Video render loop (end)
 	////////////////////////////////////////////////////////////////////////////
 
-	// notify NVENC to close out the encoded bitstream
-	mySettings->p_NvEncoder->EncodeFrame(NULL, true );
+	// If we successfully encoded 1 or more frame(s), then
+	// notify NVENC to close out the encoded bitstream,
+	if ( encoded_at_least_1 )
+		mySettings->p_NvEncoder->EncodeFrame(NULL, true );
 
 	// Free up GPU-resources allocated by NVENC
 	mySettings->p_NvEncoder->DestroyEncoder();
@@ -1895,6 +1904,10 @@ prMALError exSDKExport( // used by selector exSelExport
 		result = RenderAndWriteAllVideo(exportInfoP, progress, videoProgress, &exportDuration);
 		//fclose( mySettings->SDKFileRec.FileRecord_Video.fp );
 		CloseHandle( mySettings->SDKFileRec.FileRecord_Video.hfp );
+
+		// If the video-encode failed catastrophically, quit out of everything now.
+		if ( mySettings->video_encode_fatalerr )
+			return result;
 	} // exportVideo
 
 	///////////////////////////////////////////////////////////
@@ -1905,7 +1918,7 @@ prMALError exSDKExport( // used by selector exSelExport
 
 	// Even if user aborted export during video rendering, we'll just finish the audio to that point since it is really fast
 	// and will make the export complete. How your exporter handles an abort, of course, is up to your implementation
-	if (exportInfoP->exportAudio)
+	if (exportInfoP->exportAudio )
 	{
 		// AAC-output has two different output-modes:
 		//   These both generate exactly the same AAC-audio file, they only differ in the

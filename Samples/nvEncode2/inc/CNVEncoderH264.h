@@ -31,6 +31,9 @@ protected:
     unsigned int                                         m_uMaxWidth;
     unsigned int                                         m_uCurHeight;
     unsigned int                                         m_uCurWidth;
+	NV_ENC_H264_SEI_PAYLOAD								 m_sei_user_payload;     // SEI: user encoder settings
+	std::string											 m_sei_user_payload_str; // SEI: encoder-settings converted to text-msg
+
 public:
     virtual HRESULT                                      InitializeEncoder();
     virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui );

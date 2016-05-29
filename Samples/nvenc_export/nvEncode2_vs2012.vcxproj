@@ -116,7 +116,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;../../common/inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;../../common/inc;$(ProjectDir)/../nvEncode2/nvapi</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -125,7 +125,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>cuda.lib;nvcuvid.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nvapi.lib;cuda.lib;nvcuvid.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(Platform)\$(Configuration)\$(ProjectName).prm</OutputFile>
       <AdditionalLibraryDirectories>$(CudaToolkitLibDir);../../../common/lib/$(PlatformName);$(DXSDK_DIR)/lib/x86;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories);</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -142,7 +142,7 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;;$(ProjectDir)/../nvEncode2/nvapi</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -151,9 +151,9 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nvapi64.lib;cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(Platform)\$(Configuration)\$(ProjectName).prm</OutputFile>
-      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x64;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x64;$(CUDA_PATH)/lib/$(Platform);$(ProjectDir)\..\nvEncode2\nvapi;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <TargetMachine>MachineX64</TargetMachine>
     </Link>
@@ -164,14 +164,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;;$(ProjectDir)/../nvEncode2/nvapi</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nvapi.lib;cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>./Release/$(ProjectName).prm</OutputFile>
       <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x86;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -189,16 +189,16 @@
       <TargetEnvironment>X64</TargetEnvironment>
     </Midl>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;;$(ProjectDir)/../nvEncode2/nvapi</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>nvapi64.lib;cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>./$(ProjectName).prm</OutputFile>
-      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x64;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x64;$(CUDA_PATH)/lib/$(Platform);$(ProjectDir)\..\nvEncode2\nvapi;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -280,6 +280,7 @@
     <ClInclude Include="..\nvEncode2\inc\guidutil2.h" />
     <ClInclude Include="..\nvEncode2\inc\xcodeutil.h" />
     <ClInclude Include="..\nvEncode2\inc\xcodevid.h" />
+    <ClInclude Include="..\nvEncode2\nvapi\nvapi.h" />
     <ClInclude Include="Exporter\cpuid_ssse3.h" />
     <ClInclude Include="Exporter\SDK_Exporter.h" />
     <ClInclude Include="Exporter\SDK_Exporter_Params.h" />

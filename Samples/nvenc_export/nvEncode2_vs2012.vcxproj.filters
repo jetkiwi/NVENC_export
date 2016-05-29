@@ -420,6 +420,9 @@
     <ClInclude Include="Exporter\cpuid_ssse3.h">
       <Filter>Exporter</Filter>
     </ClInclude>
+    <ClInclude Include="..\nvEncode2\nvapi\nvapi.h">
+      <Filter>NVAPI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NVENC">
@@ -433,6 +436,9 @@
     </Filter>
     <Filter Include="Exporter">
       <UniqueIdentifier>{b4dde0b7-c1d6-4043-9ce3-86d1ac25e56f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NVAPI">
+      <UniqueIdentifier>{9420c81c-4c26-4df7-b9a0-3e9ad447dfd9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
