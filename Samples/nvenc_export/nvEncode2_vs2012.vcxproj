@@ -1,0 +1,383 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectName>nvenc_export</ProjectName>
+    <ProjectGuid>{CD8DB66A-439B-4E02-8562-1642E810D5C0}</ProjectGuid>
+    <RootNamespace>nvEncoder</RootNamespace>
+    <SccProjectName>
+    </SccProjectName>
+    <SccAuxPath>
+    </SccAuxPath>
+    <SccLocalPath>
+    </SccLocalPath>
+    <SccProvider>
+    </SccProvider>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.30319.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Configuration)\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(Configuration)\</IntDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(Platform)\$(Configuration)\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(Platform)\$(Configuration)\</IntDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Configuration)\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(Configuration)\</IntDir>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(Platform)\$(Configuration)\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(Platform)\$(Configuration)\</IntDir>
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+    <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+    <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+    <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+    <CodeAnalysisRuleSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+    <CodeAnalysisRuleAssemblies Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">.prm</TargetExt>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">.prm</TargetExt>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.prm</TargetExt>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.prm</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(DXSDK_DIR)\Lib\x86;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(DXSDK_DIR)\Lib\x86;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(DXSDK_DIR)\Lib\x64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(DXSDK_DIR)\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(DXSDK_DIR)\Lib\x64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;../../common/inc</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>cuda.lib;nvcuvid.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(Platform)\$(Configuration)\$(ProjectName).prm</OutputFile>
+      <AdditionalLibraryDirectories>$(CudaToolkitLibDir);../../../common/lib/$(PlatformName);$(DXSDK_DIR)/lib/x86;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories);</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Midl>
+      <TargetEnvironment>X64</TargetEnvironment>
+    </Midl>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(Platform)\$(Configuration)\$(ProjectName).prm</OutputFile>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x64;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>./Release/$(ProjectName).prm</OutputFile>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x86;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Midl>
+      <TargetEnvironment>X64</TargetEnvironment>
+    </Midl>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;../nvEncode2/inc;../core;../core/include;../../include;./NVENC;./Premiere_SDK_Headers;./Exporter;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>./$(ProjectName).prm</OutputFile>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/lib/x64;$(CUDA_PATH)/lib/$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <Reference Include="System">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+    <Reference Include="System.Data">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+    <Reference Include="System.Drawing">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+    <Reference Include="System.Windows.Forms">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+    <Reference Include="System.Xml">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\core\threads\NvThreadingClasses.cpp" />
+    <ClCompile Include="..\core\threads\NvThreadingWin32.cpp" />
+    <ClCompile Include="..\nvEncode2\src\CNVEncoder.cpp" />
+    <ClCompile Include="..\nvEncode2\src\CNVEncoderH264.cpp" />
+    <ClCompile Include="..\nvEncode2\src\guidutil2.cpp" />
+    <ClCompile Include="..\nvEncode2\src\utilities.cpp" />
+    <ClCompile Include="..\nvEncode2\src\xcodeutil.cpp" />
+    <ClCompile Include="Exporter\cpuid_ssse3.cpp" />
+    <ClCompile Include="Exporter\SDK_Exporter.cpp" />
+    <ClCompile Include="Exporter\SDK_Exporter_Params.cpp" />
+    <ClCompile Include="Exporter\SDK_File.cpp" />
+    <ClCompile Include="Exporter\SDK_Segment_Utils.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\common\inc\drvapi_error_string.h" />
+    <ClInclude Include="..\..\common\inc\dynlink_d3d10.h" />
+    <ClInclude Include="..\..\common\inc\dynlink_d3d11.h" />
+    <ClInclude Include="..\..\common\inc\exception.h" />
+    <ClInclude Include="..\..\common\inc\helper_cuda.h" />
+    <ClInclude Include="..\..\common\inc\helper_cuda_drvapi.h" />
+    <ClInclude Include="..\..\common\inc\helper_cuda_gl.h" />
+    <ClInclude Include="..\..\common\inc\helper_functions.h" />
+    <ClInclude Include="..\..\common\inc\helper_image.h" />
+    <ClInclude Include="..\..\common\inc\helper_math.h" />
+    <ClInclude Include="..\..\common\inc\helper_string.h" />
+    <ClInclude Include="..\..\common\inc\helper_timer.h" />
+    <ClInclude Include="..\..\common\inc\multithreading.h" />
+    <ClInclude Include="..\..\common\inc\nvMath.h" />
+    <ClInclude Include="..\..\common\inc\nvMatrix.h" />
+    <ClInclude Include="..\..\common\inc\nvQuaternion.h" />
+    <ClInclude Include="..\..\common\inc\nvShaderUtils.h" />
+    <ClInclude Include="..\..\common\inc\nvVector.h" />
+    <ClInclude Include="..\..\common\inc\param.h" />
+    <ClInclude Include="..\..\common\inc\paramgl.h" />
+    <ClInclude Include="..\..\common\inc\rendercheck_d3d10.h" />
+    <ClInclude Include="..\..\common\inc\rendercheck_d3d11.h" />
+    <ClInclude Include="..\..\common\inc\rendercheck_d3d9.h" />
+    <ClInclude Include="..\..\common\inc\rendercheck_gl.h" />
+    <ClInclude Include="..\..\common\inc\timer.h" />
+    <ClInclude Include="..\core\threads\NvThreading.h" />
+    <ClInclude Include="..\core\threads\NvThreadingClasses.h" />
+    <ClInclude Include="..\core\threads\NvThreadingWin32.h" />
+    <ClInclude Include="..\nvEncode2\inc\CNVEncoder.h" />
+    <ClInclude Include="..\nvEncode2\inc\CNVEncoderH264.h" />
+    <ClInclude Include="..\nvEncode2\inc\defines.h" />
+    <ClInclude Include="..\nvEncode2\inc\guidutil2.h" />
+    <ClInclude Include="..\nvEncode2\inc\xcodeutil.h" />
+    <ClInclude Include="..\nvEncode2\inc\xcodevid.h" />
+    <ClInclude Include="Exporter\cpuid_ssse3.h" />
+    <ClInclude Include="Exporter\SDK_Exporter.h" />
+    <ClInclude Include="Exporter\SDK_Exporter_Params.h" />
+    <ClInclude Include="Exporter\SDK_File.h" />
+    <ClInclude Include="Exporter\SDK_Segment_Utils.h" />
+    <ClInclude Include="Premiere_SDK_Headers\AE_CacheOnLoadSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAcceleratedRender.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAcceleratedRenderInvocationSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKActivationEvent.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAESupport.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAlphaTypes.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAppInfoSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKApplicationSettingsSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAsyncFileReaderSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAsyncImporter.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAsyncOperationSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKAudioSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKCaptioningSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKClassData.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKClipRenderSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKDeferredProcessingSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKDevice.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKEffect.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKEntry.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKErrorSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExport.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportController.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportControllerSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExporterUtilitySuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportFileSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportInfoSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportParamSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportProgressSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportStdParamSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKFileRegistrationSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKFlashCueMarkerDataSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKImageProcessingSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKImport.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKImporterFileManagerSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKImporterShared.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKLegacySuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKMALErrors.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKMarkerSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKMediaAcceleratorSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKMemoryManagerSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPaletteSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPiPLVer.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPixelFormat.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPixelFormatSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModule.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleAudioSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleDeviceControlSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleOverlaySuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleRenderSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugMemory.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugPPix.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugSuites.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugTimeline.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugUtilities.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugWindow.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPix2Suite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixCacheSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixCreator2Suite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixCreatorSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKQuality.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKRecordModule.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKRenderCacheType.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKRollCrawlSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKSceneMetaData.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKScopeRenderSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKSequenceAudioSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKSequenceInfoSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKSequenceRenderSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKSetEnv.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKStockImageSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKStreamLabel.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKStreamLabelEffectSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKStringSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKStructs.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKThreadedWorkSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKTimeSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKTransmit.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKTransmitInvocationSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKTypes.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKVideoSegmentProperties.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKVideoSegmentRenderSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKVideoSegmentSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\PrSDKWindowSuite.h" />
+    <ClInclude Include="Premiere_SDK_Headers\SPBasic.h" />
+    <ClInclude Include="Premiere_SDK_Headers\SPConfig.h" />
+    <ClInclude Include="Premiere_SDK_Headers\SPErrorCodes.h" />
+    <ClInclude Include="Premiere_SDK_Headers\SPTypes.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Premiere_SDK_Headers\PrSDKPiPL.r" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

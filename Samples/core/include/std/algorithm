@@ -1,0 +1,57 @@
+/*
+ * Copyright 1993-2012 NVIDIA Corporation.  All rights reserved.
+ *
+ * Please refer to the NVIDIA end user license agreement (EULA) associated
+ * with this source code for terms and conditions that govern your use of
+ * this software. Any use, reproduction, disclosure, or distribution of
+ * this software and related documentation outside the terms of the EULA
+ * is strictly prohibited.
+ *
+ */
+
+//---------------------------------------------------------------------------
+// algorithm
+//
+// Replacement for #include <algorithm>
+// Used to fixup and deficiencies in the platform headers
+//
+// Copyright(c) 2004 NVIDIA Corporation.
+//---------------------------------------------------------------------------
+
+#ifndef _COMMON_INCLUDE_STD_ALGORITM_
+#define _COMMON_INCLUDE_STD_ALGORITM_
+
+#include <algorithm>
+
+#if defined(NV_TARGET_OS_WINCE) || defined(UNDER_CE)
+
+// Prevents windef.h from #define'ing min/max later...
+#define NOMINMAX
+
+#ifdef min
+#undef min
+#endif
+
+namespace std {
+    template<class _T>
+    const _T &min(const _T &_a, const _T &_b)
+    {
+        return _a < _b ? _a : _b;
+    }
+}
+
+#ifdef max
+#undef max
+#endif
+
+namespace std {
+    template<class _T>
+    const _T &max(const _T &_a, const _T &_b)
+    {
+        return _a > _b ? _a : _b;
+    }
+}
+
+#endif
+
+#endif
