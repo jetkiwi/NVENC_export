@@ -45,6 +45,7 @@
 #include <PrSDKStringSuite.h>
 #include "SDK_Exporter.h"
 #include "SDK_Exporter_Params.h"
+#include "SDK_File.h"
 
 #include "CNVEncoder.h"
 #include "CNVEncoderH264.h"
@@ -276,6 +277,56 @@ nvenc_initialize_h264_session( const PrPixelFormat PixelFormat0, exDoExportRec *
 
 	return hr;
 }
+
+
+
+BOOL
+nvenc_create_neroaac_pipe(
+	ExportSettings *lRec
+)
+{
+	bool success = true;
+	SECURITY_ATTRIBUTES saAttr; 
+ 
+	printf("\n->Start of parent execution.\n");
+
+// Set the bInheritHandle flag so pipe handles are inherited. 
+ 
+	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES); 
+	saAttr.bInheritHandle = TRUE; 
+	saAttr.lpSecurityDescriptor = NULL; 
+
+	// Create a pipe for the child process's STDOUT. 
+	lRec->SDKFileRec.H_pipe_aacin = 0;
+	lRec->SDKFileRec.H_pipe_wavout = 0;
+
+	success = CreatePipe(
+		&(lRec->SDKFileRec.H_pipe_aacin),  // PIPE-output (read by neroAacEnc process)
+		&(lRec->SDKFileRec.H_pipe_wavout), // PIPE-input (written by nvenc_export WAVwriter)
+		&saAttr,
+		0
+	 );
+
+	if ( !success ) {
+		if ( lRec->SDKFileRec.H_pipe_aacin )
+			CloseHandle( lRec->SDKFileRec.H_pipe_aacin );
+		if ( lRec->SDKFileRec.H_pipe_wavout )
+			CloseHandle( lRec->SDKFileRec.H_pipe_wavout );
+
+		return success;
+	}
+
+	// Ensure the read handle to the pipe for STDOUT is not inherited.
+	if ( ! SetHandleInformation(lRec->SDKFileRec.H_pipe_wavout, HANDLE_FLAG_INHERIT, 0) )
+		return false;
+
+	if ( ! SetHandleInformation(lRec->SDKFileRec.H_pipe_aacin, HANDLE_FLAG_INHERIT, 0) )
+		return false;
+ 
+	return true;
+}
+
+SECURITY_ATTRIBUTES saAttr; 
 
 DllExport PREMPLUGENTRY xSDKExport (
 	csSDK_int32		selector, 
@@ -1022,6 +1073,25 @@ prSuiteError NVENC_export_FrameCompletionFunction(
 	nvEncodeFrameConfig.height = height.value.intValue;
 	nvEncodeFrameConfig.width  = width.value.intValue;
 
+	// NVENC picture-type: Interlaced vs Progressive
+	//
+	// Note that the picture-type must match the selected encoding-mode.
+	// In interlaced or MBAFF-mode, NVENC still requires all sourceFrames to be tagged as fieldPics
+	// (even if the sourceFrame is truly progressive.)
+	mySettings->exportParamSuite->GetParamValue(exID, 0, ParamID_FieldEncoding, &temp_param);
+	nvEncodeFrameConfig.fieldPicflag = ( temp_param.value.intValue == NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME ) ?
+		false :
+		true;
+	nvEncodeFrameConfig.topField = true; 
+	if ( nvEncodeFrameConfig.fieldPicflag ) {
+		PrSDKExportInfoSuite	*exportInfoSuite	= mySettings->exportInfoSuite;
+		PrParam	seqFieldOrder;  // video-sequence field order (top_first/bottom_first)
+		exportInfoSuite->GetExportSourceInfo( exID,
+										kExportInfo_VideoFieldType,
+										&seqFieldOrder);
+		nvEncodeFrameConfig.topField = (seqFieldOrder.mInt32 == prFieldsLowerFirst) ? false : true;
+	}
+
 	nvenc_pixelformat = temp_param.value.intValue;
 	use_yuv444 = (nvenc_pixelformat >= NV_ENC_BUFFER_FORMAT_YUV444_PL);
 
@@ -1185,8 +1255,10 @@ NVENC_mux_m2t(
 
 	// If shellexec was successful, then 
 	//		wait for TSMUXER.exe to finish (could take a while...)
-	if ( rc )
+	if ( rc ) {
 		WaitForSingleObject(ShExecInfo.hProcess,INFINITE);
+		DeleteFileW( metafilename.c_str() );
+	}
 
 	// done with TS-muxing!
 	return rc;
@@ -1711,11 +1783,33 @@ prMALError exSDKExport( // used by selector exSelExport
 	paramSuite->GetParamValue( exID, mgroupIndex, ADBEAudioCodec, &exParamValue );
 	audioCodec = exParamValue.value.intValue;
 
-	// Create a 'postfix' to be appended to any temporary-filenames; this will
-	// reduce the chance that nvenc_export inadvertently overwrites other user files
-	// in the output-directory.
-	wostringstream postfix; // filename postfix (unique tempID)
-	postfix << "_temp_" << std::dec << exportInfoP->exporterPluginID; 
+	///////////////////////
+	//
+	// Create a string 'postfix' to be appended to any temporary-filenames; 
+	// this will reduce the chance that nvenc_export inadvertently overwrites
+	// other user files in the output-directory.
+	//
+	// Postfixes are generated as follows:
+	//  (1) If muxing is enabled, then all audio/video bitstreams are tempfiles,
+	//      and thus given postfixes 
+	//  (2) If audio-output is enabled and output-format is AAC,
+	//      then the wav-filename is given a postfix (since it becomes a tempfile)
+
+	wostringstream wos_postfix; // filename postfixes (unique tempID)
+	wos_postfix << "_temp_" << std::dec << exportInfoP->exporterPluginID; 
+
+	const wstring postfix_str = wos_postfix.str();
+	wstring v_postfix_str, wav_postfix_str, aac_postfix_str;
+
+	// uniquify the *.aac and *.m4v filenames if output-muxer is enabled
+	if ( muxType != MUX_MODE_NONE ) {
+		aac_postfix_str = postfix_str;// postfix for *.m4a audio-tempfile
+		v_postfix_str = postfix_str; // postfix for *.m4v/*.264 video-tempfile
+	}
+
+	if ( muxType != MUX_MODE_NONE || audioCodec == ADBEAudioCodec_AAC)
+		wav_postfix_str = postfix_str;// postfix for *.wav audio-tempfile
+
 
 	// Note, we expect exportAudio/exportVideo to match the most recent 
 //	assert( mySettings->SDKFileRec.hasAudio == ( exportInfoP->exportAudio ? kPrTrue : kPrFalse) );
@@ -1768,7 +1862,7 @@ prMALError exSDKExport( // used by selector exSelExport
 		//   (2) '*.M4V'  (all other choices)
 		nvenc_make_output_filename(
 			filePath,
-			postfix.str(),          // string to uniquify this filename (if necessary)
+			v_postfix_str,          // string to uniquify this filename (if necessary)
 			(muxType == MUX_MODE_MP4) ? 
 				L"264" :				// mp4box requires H264-input file to have extension *.264
 				SDK_FILE_EXTENSION_M4V, // other: use default extension (.m4v)
@@ -1803,71 +1897,167 @@ prMALError exSDKExport( // used by selector exSelExport
 		CloseHandle( mySettings->SDKFileRec.FileRecord_Video.hfp );
 	} // exportVideo
 
+	///////////////////////////////////////////////////////////
 	//
 	// (2) Second step: Render and write out the Audio
 	//
+	const bool aac_pipe_mode = false;// didn't get the Windows-pipe to work, keep this false
 
 	// Even if user aborted export during video rendering, we'll just finish the audio to that point since it is really fast
 	// and will make the export complete. How your exporter handles an abort, of course, is up to your implementation
 	if (exportInfoP->exportAudio)
 	{
-		// Set FileRecord_Audio.filename to the *actual* outputfile path:
+		// AAC-output has two different output-modes:
+		//   These both generate exactly the same AAC-audio file, they only differ in the
+		//   use of an intermediate file or a windows-pipe.
+		//
+		// pipe-mode
+		// ----------
+		// nvenc_export WAVoutput  ---> | pipe | ---> neroAacEnc.exe <stdin> ----> *.m4a file
+		//
+		//   Here nvenc_export inserts the '|pipe|' in between wav-output subssystem, and the
+		//   <stdin> of neroAacEnc.exe.  The neroAacEnc.exe is spawned using createProcess.
+		//  Didn't work.
+		//
+		// Non pipe-mode
+		// --------------
+		//  nvenc_export WAVoutput  ---> *.wav file 
+		//  ShellExecute:  neroAacEnc.exe *.wav inputfile ----> *.m4a file
+		//
+		//   Here nvenc_export inserts the '|pipe|' in between wav-output subssystem, and the
+		//   <stdin> of neroAacEnc.exe.  Didn't work.
+
+
+		// Set FileRecord_Audio.filename to the *actual* outputfile path, which is one of the following:
 		//	  (1) for PCM-audio: *.wav
 		//	  (2) for AAC-audio: *.aac
 		nvenc_make_output_filename( 
 			filePath, 
-			postfix.str(),          // string to uniquify this filename (if necessary)
-//			((audioCodec == ADBEAudioCodec_AAC) ? SDK_FILE_EXTENSION_M4A : SDK_FILE_EXTENSION_WAV);
+			wav_postfix_str,          // string to uniquify this filename (if necessary)
 			SDK_FILE_EXTENSION_WAV,
 			mySettings->SDKFileRec.FileRecord_Audio.filename
 		);
-/*
-		mySettings->SDKFileRec.FileRecord_Audio.fp = _wfopen( 
-			mySettings->SDKFileRec.FileRecord_Audio.filename.c_str(),
-			L"wb+"
-		);
-*/
-		// Delete existing file, just in case it already exists
-		DeleteFileW( mySettings->SDKFileRec.FileRecord_Audio.filename.c_str() );
 
-		mySettings->SDKFileRec.FileRecord_Audio.hfp = CreateFileW(
-			mySettings->SDKFileRec.FileRecord_Audio.filename.c_str(),
-			GENERIC_WRITE,
-			0, // don't share
-			NULL,
-			CREATE_ALWAYS,
-			FILE_ATTRIBUTE_NORMAL,
-			NULL
-		);
+		if ( !aac_pipe_mode ) {
+			DeleteFileW( mySettings->SDKFileRec.FileRecord_Audio.filename.c_str() );
 
-		// if audiofile-creation failed, then abort the Export!
+			// PCM-audio output:
+			//   Create the *.wav output-file
+			mySettings->SDKFileRec.FileRecord_Audio.hfp = CreateFileW(
+				mySettings->SDKFileRec.FileRecord_Audio.filename.c_str(),
+				GENERIC_WRITE,
+				0, // don't share
+				NULL,
+				CREATE_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				NULL
+			);
+		} //  if ( !aac_pipe_mode )
+
+		// AAC-audio output:
+		//   In AAC-mode, we don't create the audio output file directly, 
+		//   because neroAacEnc will do that automatically. Instead,
+		//   create a "logfile" for neroAacEnc.
+		if (audioCodec == ADBEAudioCodec_AAC) {
+
+			// Generate the output-filename (*.aac) by combining the 
+			//   source filePath + ".aac"
+			nvenc_make_output_filename(
+				filePath,
+				aac_postfix_str,          // string to uniquify this filename (if necessary)
+				SDK_FILE_EXTENSION_M4A, // MPEG-4 audio file (AAC wrapped in an MPEG-4 stream)
+				mySettings->SDKFileRec.FileRecord_Audio.filename // generate the output-filename (*.aac)
+			);
+
+			if ( aac_pipe_mode ) {
+
+				// Create stdin/stdout pipe.  When we run neroAacEnc.exe, the pipe
+				// will redirect output of nvenc_export's wav-writer into 
+				// the neroAacEnc.exe process.
+				if ( !nvenc_create_neroaac_pipe( mySettings ) )
+					return exportReturn_ErrInUse;// failed to create pipe
+
+				nvenc_make_output_filename( 
+					filePath, 
+					postfix_str, // string to uniquify this filename (if necessary)
+					L"log",
+					mySettings->SDKFileRec.FileRecord_AAClog.filename
+				);
+
+				// Create the logfile that neroAacEnc.exe will write to 
+				DeleteFileW( mySettings->SDKFileRec.FileRecord_AAClog.filename.c_str() );
+				mySettings->SDKFileRec.FileRecord_AAClog.hfp = CreateFileW(
+					mySettings->SDKFileRec.FileRecord_AAClog.filename.c_str(),
+					GENERIC_WRITE,
+					0, // don't share
+					NULL,
+					CREATE_ALWAYS,
+					FILE_ATTRIBUTE_NORMAL,
+					NULL
+				);
+
+				// Connect the pipe-output to the FileRecord_Audio's file-handle.
+				// When nvenc_export's wav-writer writes to FileRecord_Audio, 
+				// the data will be piped into the neroAacEnc process.
+				mySettings->SDKFileRec.FileRecord_Audio.hfp = mySettings->SDKFileRec.H_pipe_wavout;
+
+				// Nero-AAC does not write 'raw' AAC (ADTS) files,
+				//   it will wrap the AAC audio-stream in an MPEG-4 container (M4A)
+				bool aac_result = NVENC_spawn_neroaacenc(
+					exID,
+					mySettings,
+					mySettings->SDKFileRec.FileRecord_Audio.filename.c_str() // output filename
+				);
+
+				// If AAC-file doesn't exist, then something went severely wrong
+				if ( !aac_result )
+					return exportReturn_InternalError;
+			} //  if ( aac_pipe_mode )
+		} // AAC
+
+		// sanity-check: if audiofile-creation failed, then abort the Export!
 		if ( mySettings->SDKFileRec.FileRecord_Audio.hfp == NULL )
 			return exportReturn_ErrInUse;
 
-		// First, create the audio-file's WAV-header, 
+		///////////////////////////////
+		//
+		// Write the audio
+		//
+
+		// (1) First, create the audio-file's WAV-header, 
 		//    which is written to the first 20-30 bytes of file
 		result = WriteSDK_WAVHeader(stdParmsP, exportInfoP, exportDuration);
 
-		// Now render the remaining audio
+		// (2) Now render the remaining audio
 		result = RenderAndWriteAllAudio(exportInfoP, exportDuration);
-		// If export was aborted midway by user, rewrite the header to reflect the shorter file
-//		if (result == exportReturn_Abort)
-//			result = WriteSDK_WAVHeader(stdParmsP, exportInfoP, exportDuration);
-	
-		//fclose( mySettings->SDKFileRec.FileRecord_Audio.fp );
+
+		//
+		// Write the audio
+		//
+		///////////////////////////////
+
 		CloseHandle( mySettings->SDKFileRec.FileRecord_Audio.hfp );
 	} // exportAudio
+
 
 	//
 	// kludge: AAC-audio requires execution of external third-party app: neroAacenc.exe
 	//
-	if (exportInfoP->exportAudio && (audioCodec == ADBEAudioCodec_AAC) ) {
+	if (exportInfoP->exportAudio && (audioCodec == ADBEAudioCodec_AAC) && aac_pipe_mode) {
+		// in pipe-mode, NeroAacEnc has already been spawned.  Just need to wait for completion.
+		bool aac_result = NVENC_wait_neroaacenc(
+			mySettings,
+			mySettings->SDKFileRec.FileRecord_Audio.filename.c_str() // output filename
+		);
+	}
+
+	if (exportInfoP->exportAudio && (audioCodec == ADBEAudioCodec_AAC) && !aac_pipe_mode) {
 		// Generate the input-filename (*.wav) by combining the 
 		//   source filePath + ".wav"
 		wstring wav_infilename;
 		nvenc_make_output_filename(
 			filePath,
-			postfix.str(),          // string to uniquify this filename (if necessary)
+			wav_postfix_str,      // string to uniquify this filename (if necessary)
 			SDK_FILE_EXTENSION_WAV, // MPEG-4 audio file (AAC wrapped in an MPEG-4 stream)
 			wav_infilename			// generate the output-filename (*.aac)
 		);
@@ -1876,7 +2066,7 @@ prMALError exSDKExport( // used by selector exSelExport
 		//   source filePath + ".aac"
 		nvenc_make_output_filename(
 			filePath,
-			postfix.str(),          // string to uniquify this filename (if necessary)
+			aac_postfix_str,      // string to uniquify this filename (if necessary)
 			SDK_FILE_EXTENSION_M4A, // MPEG-4 audio file (AAC wrapped in an MPEG-4 stream)
 			mySettings->SDKFileRec.FileRecord_Audio.filename // generate the output-filename (*.aac)
 		);
@@ -1893,12 +2083,17 @@ prMALError exSDKExport( // used by selector exSelExport
 		// If AAC-file doesn't exist, then something went severely wrong
 		if ( !aac_result )
 			return exportReturn_InternalError;
-
+		
 		// Once we are done with the WAV input file,
 		// delete it
 		DeleteFileW( wav_infilename.c_str() );
-
 	} // ADBEAudioCodec_AAC
+
+	//
+	// (2) Done with Second step: Render and write out the Audio
+	//
+	///////////////////////////////////////////////////////////
+
 
 	//
 	// (3) Final step: Mux (or don't mux) the elementary Audio/Video file(s)
@@ -1922,8 +2117,8 @@ prMALError exSDKExport( // used by selector exSelExport
 			paramSuite->GetParamValue(exID, mgroupIndex, ParamID_BasicMux_MP4BOX_Path, &exParamValues_muxPath);
 			mux_result = NVENC_mux_mp4(
 				exID, // exporterID (used to generate unique tempfilename)
-				exParamValues_muxPath.paramString, // path to TSMUXER.exe
-				filePath,	// output filepath (*.ts)
+				exParamValues_muxPath.paramString, // path to MP4BOX.exe
+				filePath,	// output filepath (*.mp4)
 				mySettings
 			);
 			break;
@@ -1941,10 +2136,12 @@ prMALError exSDKExport( // used by selector exSelExport
 
 	// Once we are done with muxing the raw audio/video input bitstreams,
 	//    delete them
-	if (mySettings->SDKFileRec.hasVideo )
-		DeleteFileW( mySettings->SDKFileRec.FileRecord_Video.filename.c_str() );
-	if (mySettings->SDKFileRec.hasAudio )
-		DeleteFileW( mySettings->SDKFileRec.FileRecord_Audio.filename.c_str() );
+	if ( muxType != MUX_MODE_NONE ) {
+		if (mySettings->SDKFileRec.hasVideo )
+			DeleteFileW( mySettings->SDKFileRec.FileRecord_Video.filename.c_str() );
+		if (mySettings->SDKFileRec.hasAudio )
+			DeleteFileW( mySettings->SDKFileRec.FileRecord_Audio.filename.c_str() );
+	}
 
 //	mySettings->exportFileSuite->Close(exportInfoP->fileObject);
 

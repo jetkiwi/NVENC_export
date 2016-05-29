@@ -173,6 +173,10 @@ typedef struct {
 	FileRecord_t		FileRecord_Audio;// the audio (WAV) file record
 	FileRecord_t		FileRecord_Video;// the video (M4V) file record
 	FileRecord_t		FileRecord_AV;   // muxed file (A+V) not supported yet
+	FileRecord_t		FileRecord_AAClog;// the logfile written by neroAacEnc.exe (for AAC only)
+	HANDLE				H_pipe_wavout;	 // PIPE input  (nvenc_export wav output)
+	HANDLE				H_pipe_aacin;	 // PIPE output (neroaacenc stdin input)
+	PROCESS_INFORMATION child_piProcInfo; 
 } SDK_File, *SDK_FileP, **SDK_FileH;
 #pragma pack()
 
@@ -334,10 +338,28 @@ prMALError RenderAndWriteVideoFrame(
 	const PrTime				videoTime,
 	exDoExportRec				*exportInfoP);
 
+// standard (non-pipe) mode
 bool NVENC_run_neroaacenc(
 	const csSDK_uint32 exID,
 	const ExportSettings *mySettings,
 	const wchar_t in_wavfilename[],
+	const wchar_t out_aacfilename[]
+);
+
+// for "PIPE-mode": not currently used
+// NVENC_spawn_neroaacenc() - create's a background process that
+//     executes NeroAacEnc.exe with <stdin> input (from pipe)
+bool NVENC_spawn_neroaacenc(
+	const csSDK_uint32 exID,
+	ExportSettings *mySettings,
+	const wchar_t out_aacfilename[]  // output *.AAC filename
+);
+
+// for "PIPE-mode": not currently used
+// NVENC_wait_neroaacenc() wait for completion of the process
+// spawned by NVENC_spawn_neroaacenc()
+bool NVENC_wait_neroaacenc(
+	ExportSettings *mySettings,
 	const wchar_t out_aacfilename[]
 );
 

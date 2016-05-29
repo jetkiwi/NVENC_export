@@ -565,6 +565,12 @@ prMALError exSDKGenerateDefaultParams(
 #define Add_NVENC_Param_int( group, name, min, max, dflt ) \
 	Add_NVENC_Param_int_dh( group, name, min, max, dflt, kPrFalse, kPrFalse )
 
+#define Add_NVENC_Param_float_dh( group, name, min, max, dflt, _disabled, _hidden ) \
+	Add_NVENC_Param( exParamType_float, floatValue, exParamFlag_none, group, name, min, max, dflt, _disabled, _hidden )
+
+#define Add_NVENC_Param_float( group, name, min, max, dflt ) \
+	Add_NVENC_Param_float_dh( group, name, min, max, dflt, kPrFalse, kPrFalse )
+
 #define Add_NVENC_Param_string_dh( group, name, dflt, _flags, _disabled, _hidden ) \
 	safeStrCpy(Param.identifier, 256, name); \
 	Param.paramType = exParamType_string; \
@@ -734,7 +740,10 @@ prMALError exSDKGenerateDefaultParams(
 	                             // so there's no advantange in selecting >2 ref_frames.
 	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_max_ref_frames, 1, MAX_POSITIVE, dflt_max_ref_frames)
 	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_numBFrames, 0, MAX_POSITIVE, 1)
-	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_FieldEncoding, 0, MAX_POSITIVE, NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME)
+	unsigned dflt_FieldEncoding = ( seqFieldOrder.mInt32 == prFieldsNone ) ?
+		NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME :
+		NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
+	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_FieldEncoding, 0, MAX_POSITIVE, dflt_FieldEncoding)
 
 //    unsigned int              rateControl; // 0= QP, 1= CBR. 2= VBR
 //		kludge: in Geforce drivers 320.18 and earlier, ultra-HD video (>1080p) appears to malfunction 
@@ -935,19 +944,9 @@ prMALError exSDKGenerateDefaultParams(
 	// GroupID_BasicAudio -
 	// 
 
-	// Sample rate
-	//Add_NVENC_Param_float( ADBEBasicAudioGroup, ADBEAudioRatePerSecond, 16, 4096, seqSampleRate.mFloat64)
-	exNewParamInfo sampleRateParam;
-	safeStrCpy(sampleRateParam.identifier, 256, ADBEAudioRatePerSecond);
-	sampleRateParam.paramType = exParamType_float;
-	sampleRateParam.flags = exParamFlag_none;
-	sampleRateParam.paramValues.value.floatValue = seqSampleRate.mFloat64;
-	sampleRateParam.paramValues.disabled = kPrFalse;
-	sampleRateParam.paramValues.hidden = kPrFalse;
-	exportParamSuite->AddParam(	exporterPluginID,
-									mgroupIndex,
-									ADBEBasicAudioGroup,
-									&sampleRateParam);
+	// Audio Sample rate
+	Add_NVENC_Param_float( ADBEBasicAudioGroup, ADBEAudioRatePerSecond, 0, 999999, seqSampleRate.mFloat64)
+
 	// Channel type
 
 	// kludge - TODO we don't support 16-channel audio,
@@ -1883,13 +1882,6 @@ update_exportParamSuite_VideoGroup(
 	for (csSDK_int32 i = 0; i < 3; i++)
 	{
 		fieldValue.intValue = fieldOrders[i];
-
-		// Check if NVENC hardware supports field-encoding;
-		//    only show Upper/Lower field options if NVENC supports field-encoding.
-		if ( (fieldValue.intValue != 0) &&
-			!nv_enc_caps->value_NV_ENC_CAPS_SUPPORT_FIELD_ENCODING )
-			continue; // field-encoding isn't supported, skip this one
-
 		copyConvertStringLiteralIntoUTF16(fieldOrderStrings[i], tempString);
 		lRec->exportParamSuite->AddConstrainedValuePair(	exID,
 															mgroupIndex,

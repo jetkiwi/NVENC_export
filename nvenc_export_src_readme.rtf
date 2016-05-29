@@ -1,7 +1,7 @@
 {\rtf1\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil\fcharset0 Courier New;}{\f2\fnil\fcharset0 Consolas;}{\f3\fnil Consolas;}{\f4\fnil\fcharset2 Symbol;}}
 {\*\generator Msftedit 5.41.21.2510;}\viewkind4\uc1\pard\sa200\sl276\slmult1\qc\lang9\f0\fs32 Experimental NVENC H264 encoder plugin\fs22  \par
 for Adobe Premiere Pro CS6 (Windows version)\par
-\pard\sa200\sl276\slmult1\tab\tab\tab\tab\tab\tab August 16, 2013\par
+\pard\sa200\sl276\slmult1\tab\tab\tab\tab\tab\tab Sep 6, 2013\par
 \par
 \pard\sa200\sl276\slmult1\qc\b\i *NVENC-plugin is third-party software that is not supported or distributed by Adobe or NVidia.  It comes with no warranty, use at your own risk!\par
 \pard\sa200\sl276\slmult1\b0\i0\par
@@ -132,6 +132,9 @@ If validation succeeds, then the export-operation begins.  First, the plugin wil
 \pard\li720\sa200\sl276\slmult1 This package contains source-code owned by \i NVidia Corporation \i0 and \i Adobe Corporation\i0 .  Their licensing terms apply to any code owned by them.\par
 NVENC-plugin original code (i.e. code not derived from NVidia/Adobe) is distributed under the terms of the \ul\b Lesser GPL\ulnone\b0  (LGPL) license.\par
 \pard\sa200\sl276\slmult1\ul Revision history\ulnone\par
+\pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1 Sep 6, 2013 - add interlaced-video encoding, fix output filename bugs introduced by previous release,\par
+\pard\li720\sa200\sl276\slmult1 attempted (but FAILED) to add a 'pipe-mode' for AAC-encoding.  This would have eliminated the *.WAV intermediate audio file by having NeroAacEnc.exe accept audio from <stdin>, and having nvenc_export pipe the wav-output to NeroAacEnc.exe's <stdin> pipe.\par
+Added source-code for dependent project /cudaDecodeD3D9 (this isn't used by nvenc_export, but is needed by the command-prompt encoder "nvEncode2")\par
 \pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1 August 16, 2013 - upgrade development environment to Visual Studio 2012 and NVidia CUDA 5.5\par
 {\pntext\f4\'B7\tab}July 13, 2013 - Fix 'Multiplexer' tab's missing label\par
 {\pntext\f4\'B7\tab}July 12, 2013 - Add multiplexer option MP4 (requires external third-party tool MP4Box.exe)\par

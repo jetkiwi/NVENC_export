@@ -545,6 +545,7 @@ adobe2wav_audio51_swap_ssse3(
 
 //
 // NVENC_run_neroaacenc() - convert NVENC-generated *.WAV file into *.AAC file
+//     by directly executing neroAacEnc.exe from the command-shell.
 //     Returns: true if successful
 //              false otherwise
 
@@ -594,7 +595,7 @@ NVENC_run_neroaacenc(
 	BOOL rc = ShellExecuteExW(&ShExecInfo);
 
 	// If shellexec was successful, then 
-	//		wait for TSMUXER.exe to finish (could take a while...)
+	//		wait for neroAacEnc.exe to finish (could take a while...)
 	if ( rc ) {
 		WaitForSingleObject(ShExecInfo.hProcess,INFINITE);
 
@@ -607,6 +608,136 @@ NVENC_run_neroaacenc(
 	}
 
 	return rc;
+}
+
+//
+// NVENC_spawn_neroaacenc() - convert NVENC-generated *.WAV file into *.AAC file
+//     Spawn neroAacEnc.exe as a process which reads from STDIN.
+//     nvenc_export's wav-writer will pass audio-data to STDIN of the neroAacEnc process.
+//    
+//     After calling the spawn process, nvenc_export must write audiodata into the pipe.
+//     (and finally, call NVENC_wait_neroaacenc to wait for neroAacEnc to indicate completion.)
+//
+//     Returns: true if successful
+//              false otherwise
+
+bool
+NVENC_spawn_neroaacenc(
+	const csSDK_uint32 exID,
+	ExportSettings *mySettings,
+	const wchar_t out_aacfilename[]  // output *.AAC filename
+)
+{
+	std::wostringstream os;
+	wstring tempdirname;
+	STARTUPINFOW siStartInfo;
+	wchar_t *pwstring = NULL; // pointer to a wchar_t string
+	csSDK_int32					mgroupIndex		= 0;
+	exParamValues exParamValue_aacpath, exParamValue_temp;
+	int32_t kbitrate; // audio bitrate (Kbps)
+	
+	mySettings->exportParamSuite->GetParamValue( exID, mgroupIndex, ParamID_AudioFormat_NEROAAC_Path, &exParamValue_aacpath);
+	mySettings->exportParamSuite->GetParamValue( exID, mgroupIndex, ADBEAudioBitrate, &exParamValue_temp);
+	kbitrate = exParamValue_temp.value.intValue; // audio bitrate (Kbps)
+	nvenc_make_output_dirname( out_aacfilename, tempdirname );
+	
+	//
+	// build the command-line to execute neroAAC.
+	// It will look something like this:
+	//
+	//    neroaacenc.exe -br 12340000 -if - -of "out_aacfilename.aac"
+	os << exParamValue_aacpath.paramString; // the execution-path to neroAacEnc.exe
+	os << " -br " << std::dec << (kbitrate*1024);
+	os << " -if - "; // input-file: stdin
+	os << " -of \"" << out_aacfilename << "\"";
+	pwstring = new wchar_t[ os.str().size() ];
+	lstrcpyW( pwstring, os.str().c_str() ); // harden the arguments
+
+	// Just in case the output-file already exists, delete it
+	DeleteFileW( out_aacfilename );
+ 
+// Set up members of the PROCESS_INFORMATION structure. 
+ 
+   ZeroMemory( &(mySettings->SDKFileRec.child_piProcInfo), sizeof(PROCESS_INFORMATION) );
+ 
+// Set up members of the STARTUPINFO structure. 
+// This structure specifies the STDIN and STDOUT handles for redirection.
+ 
+   ZeroMemory( &siStartInfo, sizeof(STARTUPINFO) );
+   siStartInfo.cb = sizeof(STARTUPINFO); 
+   siStartInfo.hStdError = mySettings->SDKFileRec.FileRecord_AAClog.hfp;
+   siStartInfo.hStdOutput = mySettings->SDKFileRec.FileRecord_AAClog.hfp;
+   siStartInfo.hStdInput = mySettings->SDKFileRec.H_pipe_aacin; // WAVout
+   siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
+ 
+// Create the child process. 
+   BOOL bSuccess = CreateProcessW(NULL, 
+		pwstring,		// command line 
+		NULL,          // process security attributes 
+		NULL,          // primary thread security attributes 
+		TRUE,          // handles are inherited 
+		0,             // creation flags 
+		NULL,          // use parent's environment 
+		tempdirname.c_str(), // use parent's current directory 
+		&siStartInfo,  // STARTUPINFO pointer 
+		&(mySettings->SDKFileRec.child_piProcInfo)
+	);  // receives PROCESS_INFORMATION 
+
+	//delete pwstring;// don't forget to free this manually allocated buffer
+
+	return bSuccess;
+}
+
+bool
+NVENC_wait_neroaacenc(
+	ExportSettings *mySettings,
+	const wchar_t out_aacfilename[]  // output *.AAC filename
+)
+{
+	bool bSuccess = true;
+
+	WaitForSingleObject(
+		mySettings->SDKFileRec.child_piProcInfo.hProcess,
+		INFINITE
+	);
+
+	CloseHandle( mySettings->SDKFileRec.H_pipe_aacin );
+	CloseHandle( mySettings->SDKFileRec.H_pipe_wavout );
+	CloseHandle( mySettings->SDKFileRec.FileRecord_AAClog.hfp );
+	mySettings->SDKFileRec.H_pipe_aacin = NULL;
+	mySettings->SDKFileRec.H_pipe_wavout= NULL;
+
+	DWORD dw;
+	GetExitCodeProcess( mySettings->SDKFileRec.child_piProcInfo.hProcess, &dw );
+
+	if ( dw == 0 ) {
+		// neroAacEnc succeeded: no need to keep the logfile so delete it
+		DeleteFileW( mySettings->SDKFileRec.FileRecord_AAClog.filename.c_str() );
+	}
+	else {
+		// neroAacEnc failed, append an error message
+		bSuccess = false;
+		FILE *fp = _wfopen( 
+			mySettings->SDKFileRec.FileRecord_AAClog.filename.c_str(),
+			L"r+"
+		);
+
+		fprintf( fp, "nvenc_export ERROR: process exited with %0u (0x%0X)\n",
+			dw, dw );
+		fclose( fp );
+	}
+
+	// now verify the output file really exists
+	FILE *fp = _wfopen(
+		out_aacfilename,
+		L"rb"
+	);
+	if ( fp == NULL ) 
+		bSuccess = false; // can't find the file, something went wrong!
+	else
+		fclose( fp );
+
+	return bSuccess;
 }
 
 
@@ -972,6 +1103,7 @@ prMALError RenderAndWriteVideoFrame(
 	nvenc_pixelformat = temp_param.value.intValue;
 	use_yuv444 = (nvenc_pixelformat >= NV_ENC_BUFFER_FORMAT_YUV444_PL);
 
+
 	if ( isFrame0 ) {
 		// First frame of render:
 		// ----------------------
@@ -1078,6 +1210,25 @@ prMALError RenderAndWriteVideoFrame(
 	nvEncodeFrameConfig.height = height.value.intValue;
 	nvEncodeFrameConfig.width  = width.value.intValue;
 
+	// NVENC picture-type: Interlaced vs Progressive
+	//
+	// Note that the picture-type must match the selected encoding-mode.
+	// In interlaced or MBAFF-mode, NVENC still requires all sourceFrames to be tagged as fieldPics
+	// (even if the sourceFrame is truly progressive.)
+	mySettings->exportParamSuite->GetParamValue(exID, 0, ParamID_FieldEncoding, &temp_param);
+	nvEncodeFrameConfig.fieldPicflag = ( temp_param.value.intValue == NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME ) ?
+		false :
+		true;
+	nvEncodeFrameConfig.topField = true; // default
+	if ( nvEncodeFrameConfig.fieldPicflag ) {
+		PrSDKExportInfoSuite	*exportInfoSuite	= mySettings->exportInfoSuite;
+		PrParam	seqFieldOrder;  // video-sequence field order (top_first/bottom_first)
+		exportInfoSuite->GetExportSourceInfo( exID,
+										kExportInfo_VideoFieldType,
+										&seqFieldOrder);
+		nvEncodeFrameConfig.topField = (seqFieldOrder.mInt32 == prFieldsLowerFirst) ? false : true;
+	}
+
 	if ( use_yuv444 ) {
 		// 4:4:4 packed pixel - only pointer[0] is used, (1 & 2 aren't)
 		mySettings->ppixSuite->GetPixels(	renderResult.outFrame,
@@ -1120,7 +1271,6 @@ prMALError RenderAndWriteVideoFrame(
 	//       as the frame is placed in the encodeQueue.
 	//   (2) if NvEncoder is operating in 'sync_mode', then call will not return until
 	//       NVENC has completed encoding of this frame.
-	//HRESULT hr = mySettings->p_NvEncoder->EncodeFrame( &nvEncodeFrameConfig, false );
 	HRESULT hr = S_OK;
 	if ( !dont_encode )
 		hr = mySettings->p_NvEncoder->EncodeFramePPro( &nvEncodeFrameConfig, false );

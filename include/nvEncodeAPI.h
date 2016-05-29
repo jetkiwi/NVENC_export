@@ -16,20 +16,31 @@
  * of the Licensed Deliverables to any third party without the express
  * written consent of NVIDIA is prohibited.
  *
- * NOTWITHSTANDING ANY TERMS OR CONDITIONS TO THE CONTRARY IN THE
- * LICENSE AGREEMENT, NVIDIA MAKES NO REPRESENTATION ABOUT THE
- * SUITABILITY OF THESE LICENSED DELIVERABLES FOR ANY PURPOSE.  IT IS
- * PROVIDED "AS IS" WITHOUT EXPRESS OR IMPLIED WARRANTY OF ANY KIND.
- * NVIDIA DISCLAIMS ALL WARRANTIES WITH REGARD TO THESE LICENSED
- * DELIVERABLES, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY,
- * NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * NOTWITHSTANDING ANY TERMS OR CONDITIONS TO THE CONTRARY IN THE
- * LICENSE AGREEMENT, IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY
- * SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, OR ANY
- * DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
- * WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
- * ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
- * OF THESE LICENSED DELIVERABLES.
+ * ALL NVIDIA DESIGN SPECIFICATIONS, REFERENCE BOARDS, FILES, DRAWINGS, 
+ * DIAGNOSTICS, LISTS, AND OTHER DOCUMENTS (TOGETHER AND SEPARATELY, 
+ * “MATERIALS”) ARE BEING PROVIDED “AS IS.” WITHOUT EXPRESS OR IMPLIED 
+ * WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH REGARD 
+ * TO THESE LICENSED DELIVERABLES, INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
+ * NOTWITHSTANDING ANY TERMS OR CONDITIONS TO THE CONTRARY IN THE LICENSE 
+ * AGREEMENT, IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT,
+ * INCIDENTAL, OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING
+ * FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, 
+ * NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION 
+ * WITH THE USE OR PERFORMANCE OF THESE LICENSED DELIVERABLES.
+ *
+ * Information furnished is believed to be accurate and reliable. However,
+ * NVIDIA assumes no responsibility for the consequences of use of such 
+ * information nor for any infringement of patents or other rights of 
+ * third parties, which may result from its use.  No License is granted 
+ * by implication or otherwise under any patent or patent rights of NVIDIA 
+ * Corporation.  Specifications mentioned in the software are subject to 
+ * change without notice. This publication supersedes and replaces all 
+ * other information previously supplied.
+ *
+ * NVIDIA Corporation products are not authorized for use as critical 
+ * components in life support devices or systems without express written 
+ * approval of NVIDIA Corporation.
  *
  * U.S. Government End Users.  These Licensed Deliverables are a
  * "commercial item" as that term is defined at 48 C.F.R. 2.101 (OCT
@@ -49,8 +60,8 @@
 
 /**
  * \file nvEncodeAPI.h
- *   NvEncodeAPI provides a video encoder interface to NVIDIA devices.
- * \date 2012 
+ *   NvEncodeAPI provides a NVENC Video Encoding interface to NVIDIA GPU devices based on the Kepler architecture.
+ * \date 2011-2013
  *  This file contains the interface constants, structure definitions and function prototypes.
  */
 
@@ -64,7 +75,6 @@
 #endif
 /*
 #ifdef _MSC_VER
-#ifndef _STDINT
 typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
 typedef __int64 int64_t;
@@ -73,7 +83,6 @@ typedef char int8_t;
 typedef unsigned char uint8_t;
 typedef short int16_t;
 typedef unsigned short uint16_t;
-#endif
 #else
 */
 #include <stdint.h>
@@ -188,10 +197,6 @@ static const GUID NV_ENC_H264_PROFILE_STEREO_GUID =
 // {CE788D20-AAA9-4318-92BB-AC7E858C8D36}
 static const GUID NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY_GUID =
 { 0xce788d20, 0xaaa9, 0x4318, { 0x92, 0xbb, 0xac, 0x7e, 0x85, 0x8c, 0x8d, 0x36 } };
-
-// {AEC1BD87-E85B-48f2-84C3-98BCA6285072}
-static const GUID NV_ENC_H264_PROFILE_CONSTRAINED_HIGH_GUID = 
-{ 0xaec1bd87, 0xe85b, 0x48f2, { 0x84, 0xc3, 0x98, 0xbc, 0xa6, 0x28, 0x50, 0x72 } };
 
 // {4F0675ED-0BB6-4314-8A38-14E6BD05F27F}
 static const GUID NV_ENC_MPEG2_PROFILE_SIMPLE_GUID =
@@ -326,7 +331,8 @@ typedef enum _NV_ENC_PIC_STRUCT
 {
     NV_ENC_PIC_STRUCT_FRAME         = 0x01,    /**< Progressive frame */
     NV_ENC_PIC_STRUCT_TOP_FIELD     = 0x02,    /**< Top field of interlaced picture */
-    NV_ENC_PIC_STRUCT_BOTTOM_FIELD  = 0x04     /**< Bottom field of interlaced picture */
+//    NV_ENC_PIC_STRUCT_BOTTOM_FIELD  = 0x04     /**< Bottom field of interlaced picture */ // broken
+    NV_ENC_PIC_STRUCT_BOTTOM_FIELD  = 0x03     /**< Bottom field of interlaced picture */ // rliao - backported from NVENC SDK 3.0
 } NV_ENC_PIC_STRUCT;
 
 /**
@@ -616,6 +622,10 @@ typedef enum _NV_ENC_PIC_FLAGS
     NV_ENC_PIC_FLAG_DYN_BITRATE_CHANGE = 0x20,  /**< Indicates change in bitrate from current picture onwards */
     NV_ENC_PIC_FLAG_USER_FORCE_CONSTQP = 0x40,  /**< Indicates user forced constant QP Rate control from current picture onwards */
     NV_ENC_PIC_FLAG_DYN_RCMODE_CHANGE  = 0x80,  /**< Indicates change in Rate control mode on the fly from current picture onwards */
+    NV_ENC_PIC_FLAG_REINIT_ENCODER     = 0x100, /**< This resets the rate control states and other internal encoder states. This should be used only with an IDR frame.
+                                                     If NV_ENC_INITIALIZE_PARAMS::enablePTD is set to 1, encoder will force the frame type to IDR 
+                                                     This flag can be used with NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_DYN_RES_CHANGE to reset the encoder to encode a new sequence
+                                                     without recreating the encoder session. */
 } NV_ENC_PIC_FLAGS;
 
 /**
@@ -939,11 +949,6 @@ typedef enum _NV_ENC_CAPS
     NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT,
 
     /**
-     * Maximum MBs per frame supported.
-     */
-    NV_ENC_CAPS_MB_NUM_MAX,
-
-    /**
      * Reserved - Not to be used by clients.
      */
     NV_ENC_CAPS_EXPOSED_COUNT
@@ -1025,10 +1030,12 @@ typedef struct _NV_ENC_QP
     uint32_t                        vbvInitialDelay;                             /**< [in]: Specifies the VBV(HRD) initial delay in bits. Set 0 to use the default VBV  initial delay .*/
     uint32_t                        enableMinQP          :1;                     /**< [in]: Set this to 1 if minimum QP used for rate control. */
     uint32_t                        enableMaxQP          :1;                     /**< [in]: Set this to 1 if maximum QP used for rate control. */
-    uint32_t                        reservedBitFields    :30;                    /**< [in]: Reserved bitfields and must be set to 0 */
+    uint32_t                        enableInitialRCQP    :1;                     /**< [in]: Set this to 1 if user suppplied initial QP is used for rate control. */
+    uint32_t                        reservedBitFields    :29;                    /**< [in]: Reserved bitfields and must be set to 0 */
     NV_ENC_QP                       minQP;                                       /**< [in]: Specifies the minimum QP used for rate control. Client must set NV_ENC_CONFIG::enableMinQP to 1. */
     NV_ENC_QP                       maxQP;                                       /**< [in]: Specifies the maximum QP used for rate control. Client must set NV_ENC_CONFIG::enableMaxQP to 1. */
-    uint32_t                        reserved[16];
+    NV_ENC_QP                       initialRCQP;                                 /**< [in]: Specifies the initial QP used for rate control. Client must set NV_ENC_CONFIG::enableInitialRCQP to 1. */
+    uint32_t                        reserved[13];
  } NV_ENC_RC_PARAMS;
  
 /** macro for constructing the version field of ::_NV_ENC_RC_PARAMS */
@@ -1173,6 +1180,7 @@ typedef struct _NV_ENC_CONFIG_H264
 /**
  * \struct _NV_ENC_CONFIG_MPEG2   
  * MPEG2 encoder configuration parameters to be set during initialization.
+ * MPEG2 encoding is currently not supported.
  */
 typedef struct _NV_ENC_CONFIG_MPEG2
 {
@@ -1189,6 +1197,7 @@ typedef struct _NV_ENC_CONFIG_MPEG2
 /**
  * \struct _NV_ENC_CONFIG_JPEG
  * JPEG encoder configuration parameters to be set during initialization.
+ * JPEG encoding is currently not supported.
  */
 typedef struct _NV_ENC_CONFIG_JPEG
 {
@@ -1199,6 +1208,7 @@ typedef struct _NV_ENC_CONFIG_JPEG
 /**
  * \struct _NV_ENC_CONFIG_VC1
  * VC1 encoder configuration parameters to be set during initialization.
+ * VC1 encoding is currently not supported.
  */
 typedef struct _NV_ENC_CONFIG_VC1
 {
@@ -1217,6 +1227,7 @@ typedef struct _NV_ENC_CONFIG_VC1
 /**
  * \struct _NV_ENC_CONFIG_VP8
  * VP8 encoder configuration parameters to be set during initialization.
+ * VP8 encoding is currently not supported.
  */
 typedef struct _NV_ENC_CONFIG_VP8
 {
@@ -1231,10 +1242,10 @@ typedef struct _NV_ENC_CONFIG_VP8
 typedef union _NV_ENC_CODEC_CONFIG
 {
     NV_ENC_CONFIG_H264      h264Config;                  /**< [in]: Specifies the H.264-specific encoder configuration */
-    NV_ENC_CONFIG_VC1       vc1Config;                   /**< [in]: Specifies the VC1-specific encoder configuration. Currently reserved and must not to be used. */
-    NV_ENC_CONFIG_JPEG      jpegConfig;                  /**< [in]: Specifies the JPEG-specific encoder configuration. Currently reserved and must not to be used. */
-    NV_ENC_CONFIG_MPEG2     mpeg2Config;                 /**< [in]: Specifies theMPEG2-specific encoder configuration. Currently reserved and must not to be used. */
-    NV_ENC_CONFIG_VP8       vp8Config;                   /**< [in]: Specifies the VP8-specific encoder configuration. Currently reserved and must not to be used. */
+    NV_ENC_CONFIG_VC1       vc1Config;                   /**< [in]: Specifies the VC1-specific encoder configuration. Currently unsupported and must not to be used. */
+    NV_ENC_CONFIG_JPEG      jpegConfig;                  /**< [in]: Specifies the JPEG-specific encoder configuration. Currently unsupported and must not to be used. */
+    NV_ENC_CONFIG_MPEG2     mpeg2Config;                 /**< [in]: Specifies the MPEG2-specific encoder configuration. Currently unsupported and must not to be used. */
+    NV_ENC_CONFIG_VP8       vp8Config;                   /**< [in]: Specifies the VP8-specific encoder configuration. Currently unsupported and must not to be used. */
     uint32_t                reserved[256];               /**< [in]: Reserved and must be set to 0 */
 } NV_ENC_CODEC_CONFIG;
 
@@ -1269,7 +1280,7 @@ typedef struct _NV_ENC_CONFIG
 typedef struct _NV_ENC_INITIALIZE_PARAMS
 {
     uint32_t                                   version;                         /**< [in]: Struct version. Must be set to ::NV_ENC_INITIALIZE_PARAMS_VER. */
-    GUID                                       encodeGUID;                      /**< [in]: Specifies the Encode GUID for which the encoder is being created. If not set ::NvEncInitializeEncoder() API will fail. */
+    GUID                                       encodeGUID;                      /**< [in]: Specifies the Encode GUID for which the encoder is being created. ::NvEncInitializeEncoder() API will fail if this is not set, or set to unsupported value. */
     GUID                                       presetGUID;                      /**< [in]: Specifies the preset for encoding. If the preset GUID is set then , the preset configuration will be applied before any other parameter. */
     uint32_t                                   encodeWidth;                     /**< [in]: Specifies the encode width. If not set ::NvEncInitializeEncoder() API will fail. */
     uint32_t                                   encodeHeight;                    /**< [in]: Specifies the encode height. If not set ::NvEncInitializeEncoder() API will fail. */
@@ -1321,6 +1332,7 @@ typedef struct _NV_ENC_PRESET_CONFIG
 /**
  * \struct _NV_ENC_PIC_PARAMS_MVC
  * MVC specific enc pic params. sent on a per frame basis.
+ * MVC encoding is currently not supported.
  */ 
 typedef struct _NV_ENC_PIC_PARAMS_MVC
 {
@@ -1332,7 +1344,8 @@ typedef struct _NV_ENC_PIC_PARAMS_MVC
 }NV_ENC_PIC_PARAMS_MVC;
 
 /**
-*   SVC specific enc pic params. sent on a per frame basis.
+ * SVC specific enc pic params. sent on a per frame basis.
+ * SVC encoding is currently not supported.
 */ 
 typedef struct _NV_ENC_PIC_PARAMS_SVC
 {
@@ -1400,6 +1413,7 @@ typedef struct _NV_ENC_PIC_PARAMS_H264
 /**
  * \struct _NV_ENC_PIC_PARAMS_MPEG
  * MPEG specific enc pic params. sent on a per frame basis.
+ * MPEG encoding is currently not supported.
  */
 typedef struct _NV_ENC_PIC_PARAMS_MPEG
 {
@@ -1412,6 +1426,7 @@ typedef struct _NV_ENC_PIC_PARAMS_MPEG
 /**
  * \struct _NV_ENC_PIC_PARAMS_VC1
  * VC1 specific enc pic params. sent on a per frame basis.
+ * VC1 encoding is currently not supported.
  */
 typedef struct _NV_ENC_PIC_PARAMS_VC1
 {
@@ -1426,6 +1441,7 @@ typedef struct _NV_ENC_PIC_PARAMS_VC1
 /**
  * \struct _NV_ENC_PIC_PARAMS_VP8
  * VP8 specific enc pic params. sent on a per frame basis.
+ * VP8 encoding is currently not supported.
  */
 typedef struct _NV_ENC_PIC_PARAMS_VP8
 {
@@ -1436,7 +1452,8 @@ typedef struct _NV_ENC_PIC_PARAMS_VP8
 
 /**
  * \struct _NV_ENC_PIC_PARAMS_JPEG
- *  JPEG specific enc pic params. sent on a per frame basis.
+ * JPEG specific enc pic params. sent on a per frame basis.
+ * JPEG encoding is currently not supported.
  */
 typedef struct _NV_ENC_PIC_PARAMS_JPEG
 {
@@ -1454,12 +1471,12 @@ typedef struct _NV_ENC_PIC_PARAMS_JPEG
  */
 typedef union _NV_ENC_CODEC_PIC_PARAMS
 {
-    NV_ENC_PIC_PARAMS_H264 h264PicParams;                /**< [in]: H264 encode picture params */
-    NV_ENC_PIC_PARAMS_MPEG mpegPicParams;                /**< [in]: MPEG2 encode picture params */
-    NV_ENC_PIC_PARAMS_VC1  vc1PicParams;                 /**< [in]: VC1 encode picture params */
-    NV_ENC_PIC_PARAMS_JPEG jpegPicParams;                /**< [in]: JPEG encode picture params */
-    NV_ENC_PIC_PARAMS_VP8  vp8PicParams;                 /**< [in]: VP8 encode picture params */
-    uint32_t               reserved[256];                /**< [in]: Reserved and must be set to 0 */
+    NV_ENC_PIC_PARAMS_H264 h264PicParams;                /**< [in]: H264 encode picture params. */
+    NV_ENC_PIC_PARAMS_MPEG mpegPicParams;                /**< [in]: MPEG2 encode picture params. Currently unsupported and must not to be used. */
+    NV_ENC_PIC_PARAMS_VC1  vc1PicParams;                 /**< [in]: VC1 encode picture params. Currently unsupported and must not to be used.   */
+    NV_ENC_PIC_PARAMS_JPEG jpegPicParams;                /**< [in]: JPEG encode picture params. Currently unsupported and must not to be used.  */
+    NV_ENC_PIC_PARAMS_VP8  vp8PicParams;                 /**< [in]: VP8 encode picture params. Currently unsupported and must not to be used.   */
+    uint32_t               reserved[256];                /**< [in]: Reserved and must be set to 0. */
 } NV_ENC_CODEC_PIC_PARAMS;
 
 /**
@@ -1495,7 +1512,13 @@ typedef struct _NV_ENC_PIC_PARAMS
     NVENC_EXTERNAL_ME_HINT                     *meExternalHints;                /**< [in]: Specifies the pointer to ME external hints for the current frame. The size of ME hint buffer should be equal to number of macroblocks multiplied by the total number of candidates per macroblock.
                                                                                            The total number of candidates per MB per direction = 1*meHintCountsPerBlock[Lx].numCandsPerBlk16x16 + 2*meHintCountsPerBlock[Lx].numCandsPerBlk16x8 + 2*meHintCountsPerBlock[Lx].numCandsPerBlk8x8  
                                                                                            + 4*meHintCountsPerBlock[Lx].numCandsPerBlk8x8. For frames using bidirectional ME , the total number of candidates for single macroblock is sum of total number of candidates per MB for each direction (L0 and L1) */
-    uint32_t                                   reserved1[261];                  /**< [in]: Reserved and must be set to 0 */
+    uint32_t                                   newDarWidth;                     /**< [in]: Specifies the new disalay aspect ratio width for current Encoding session, in case of dynamic resolution change. Client should only set this in combination with NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_DYN_RES_CHANGE.
+                                                                                           Additionally, if Picture Type decision is handled by the Client [_NV_ENC_INITIALIZE_PARAMS::enablePTD == 0], the client should set the _NV_ENC_PIC_PARAMS::pictureType as ::NV_ENC_PIC_TYPE_IDR.
+                                                                                           If _NV_ENC_INITIALIZE_PARAMS::enablePTD == 1, then the Encoder will generate an IDR frame corresponding to this input. */
+    uint32_t                                   newDarHeight;                    /**< [in]: Specifies the new disalay aspect ratio height for current Encoding session, in case of dynamic resolution change. Client should only set this in combination with NV_ENC_PIC_FLAGS::NV_ENC_PIC_FLAG_DYN_RES_CHANGE.
+                                                                                           Additionally, if Picture Type decision is handled by the Client [_NV_ENC_INITIALIZE_PARAMS::enablePTD == 0], the client should set the _NV_ENC_PIC_PARAMS::pictureType as ::NV_ENC_PIC_TYPE_IDR.
+                                                                                           If _NV_ENC_INITIALIZE_PARAMS::enablePTD == 1, then the Encoder will generate an IDR frame corresponding to this input. */
+    uint32_t                                   reserved1[259];                  /**< [in]: Reserved and must be set to 0 */
     void*                                      reserved2[63];                   /**< [in]: Reserved and must be set to NULL */
 } NV_ENC_PIC_PARAMS;
 
@@ -1581,7 +1604,7 @@ typedef struct _NV_ENC_MAP_INPUT_RESOURCE
     uint32_t                   version;                   /**< [in]:  Struct version. Must be set to ::NV_ENC_MAP_INPUT_RESOURCE_VER. */
     uint32_t                   subResourceIndex;          /**< [in]:  Deprecated. Do not use. */
     void*                      inputResource;             /**< [in]:  Deprecated. Do not use. */
-    NV_ENC_REGISTERED_PTR      registeredResource;        /**< [in]:  The Registered resource handle obtained by calling ::NvEncRegisterInputResource. */
+    NV_ENC_REGISTERED_PTR      registeredResource;        /**< [in]:  The Registered resource handle obtained by calling NvEncRegisterInputResource. */
     NV_ENC_INPUT_PTR           mappedResource;            /**< [out]: Mapped pointer corresponding to the registeredResource. This pointer must be used in NV_ENC_PIC_PARAMS::inputBuffer parameter in ::NvEncEncodePicture() API. */
     NV_ENC_BUFFER_FORMAT       mappedBufferFmt;           /**< [out]: Buffer format of the outputResource. This buffer format must be used in NV_ENC_PIC_PARAMS::bufferFmt if client using the above mapped resource pointer. */
     uint32_t                   reserved1[251];            /**< [in]:  Reserved and must be set to 0. */
