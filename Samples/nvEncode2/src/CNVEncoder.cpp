@@ -89,13 +89,17 @@ CNvEncoder::CNvEncoder() :
     SET_VER(m_stPresetConfig, NV_ENC_PRESET_CONFIG);
     SET_VER(m_stPresetConfig.presetCfg, NV_ENC_CONFIG);
 
+	// all NVENC hardware at a minimum supports H264, so H264 is the default
 	m_stEncodeGUID = NV_ENC_CODEC_H264_GUID;
+
     m_dwCodecProfileGUIDCount = 0;
     memset(&m_stCodecProfileGUID, 0, sizeof(GUID)) ;
     memset(&m_stPresetGUID, 0, sizeof(GUID));
 	memset( (void *)&m_nv_enc_caps, 0, sizeof(m_nv_enc_caps) );
     
     m_pYUV[0] = m_pYUV[1] = m_pYUV[2] = NULL;
+
+	m_useExternalContext = false;
 
     NVENCSTATUS nvStatus;
     MYPROC nvEncodeAPICreateInstance; // function pointer to create instance in nvEncodeAPI
@@ -185,16 +189,35 @@ CNvEncoder::~CNvEncoder()
 	delete_array(m_stCodecPresetGUIDArray);
 
 	DestroyEncodeSession();
+
+	if ( !m_useExternalContext )
+		cuCtxDestroy( m_cuContext );
 }
 
-unsigned int CNvEncoder::GetCodecType(const GUID &encodeGUID)
+GUID CNvEncoder::GetCodecGUID(const NvEncodeCompressionStd codec) const
+{
+	switch (codec) {
+		case NV_ENC_H264 : return NV_ENC_CODEC_H264_GUID;
+			break;
+
+		case NV_ENC_H265: return NV_ENC_CODEC_HEVC_GUID;
+			break;
+
+		default: return NV_ENC_PRESET_GUID_NULL; // unknown codec
+	}
+}
+
+unsigned int CNvEncoder::GetCodecType(const GUID &encodeGUID) const
 {
     NvEncodeCompressionStd eEncodeCompressionStd = NV_ENC_Unknown;
     if (compareGUIDs(encodeGUID, NV_ENC_CODEC_H264_GUID))
     {
         eEncodeCompressionStd = NV_ENC_H264;
     }
-    else
+	else if (compareGUIDs(encodeGUID, NV_ENC_CODEC_HEVC_GUID)) {
+		eEncodeCompressionStd = NV_ENC_H265;
+	}
+	else
     {
 		printf(" unsupported codec GUID ");
 		PrintGUID(encodeGUID);
@@ -203,7 +226,7 @@ unsigned int CNvEncoder::GetCodecType(const GUID &encodeGUID)
     return eEncodeCompressionStd;
 }
 
-unsigned int CNvEncoder::GetCodecProfile(const GUID &encodeProfileGUID)
+unsigned int CNvEncoder::GetCodecProfile(const GUID &encodeProfileGUID) const
 {
 	guidutil::inttype value;
 	//printf("CNvEncoder::GetCodecProfile() show supported codecs (MPEG-2, VC1, H264, etc.) \n");
@@ -360,6 +383,11 @@ HRESULT CNvEncoder::InitCuda(unsigned int deviceID)
 
     printf("\n");
 
+	// If encoder is configured to use an externally supplied Cuda-context, then this
+	// function should never be called
+	if ( m_useExternalContext )
+		return E_FAIL;
+
     // CUDA interfaces
     cuResult = cuInit(0);
     if (cuResult != CUDA_SUCCESS) {
@@ -401,6 +429,8 @@ HRESULT CNvEncoder::InitCuda(unsigned int deviceID)
         my_printf("  [ GPU %d does not have NVENC capabilities] exiting\n", deviceID);
         exit(EXIT_FAILURE);
     }
+
+	m_deviceID = deviceID;
 
 	// If a context already exists, destroy it (to free resources) before creating the new one.
 	// (if we fail to do this, memory-leak!)
@@ -448,8 +478,8 @@ HRESULT CNvEncoder::AllocateIOBuffers(unsigned int dwInputWidth, unsigned int dw
 
                 // (1) Allocate Cuda buffer. We will use this to hold the input YUV data.
 				unsigned row_count;
-				if ( IsNV12Format(m_stEncoderInput.chromaFormatIDC) ) {
-					m_stInputSurface[i].bufferFmt      = NV_ENC_BUFFER_FORMAT_NV12_PL;
+				if ( m_stEncoderInput.chromaFormatIDC == cudaVideoChromaFormat_420 ) {
+					m_stInputSurface[i].bufferFmt = NV_ENC_BUFFER_FORMAT_NV12_PL;
 					row_count = dwInputHeight*3/2; // enough rows for NV12 frame
 				}
 				else {
@@ -537,11 +567,10 @@ HRESULT CNvEncoder::AllocateIOBuffers(unsigned int dwInputWidth, unsigned int dw
 			// Strange, the host-buffer created must be either NV12_PL or YUV444_PL.
 			// Attempting to create a NV12_Tiled* or YUV444_Tiled* buffer results in blank-output from NVENC.
 			//
-            stAllocInputSurface.bufferFmt      = m_stEncoderInput.chromaFormatIDC; // NV_ENC_BUFFER_FORMAT_NV12_PL;
-			if (IsNV12Format(m_stEncoderInput.chromaFormatIDC))
-				stAllocInputSurface.bufferFmt      = NV_ENC_BUFFER_FORMAT_NV12_PL;
+			if (m_stEncoderInput.chromaFormatIDC == cudaVideoChromaFormat_420)
+				stAllocInputSurface.bufferFmt = NV_ENC_BUFFER_FORMAT_NV12_PL;
 			else
-				stAllocInputSurface.bufferFmt      = NV_ENC_BUFFER_FORMAT_YUV444_PL;
+				stAllocInputSurface.bufferFmt = NV_ENC_BUFFER_FORMAT_YUV444_PL;
 //            else // assume it's YUV444 format
 //                stAllocInputSurface.bufferFmt      = IsNV12Tiled64x16Format(m_dwInputFormat) ? NV_ENC_BUFFER_FORMAT_NV12_PL : m_dwInputFormat;
 
@@ -763,7 +792,7 @@ HRESULT CNvEncoder::CopyBitstreamData(EncoderThreadData stThreadData)
     SET_VER(lockBitstreamData, NV_ENC_LOCK_BITSTREAM);
 
     if(m_stInitEncParams.reportSliceOffsets)
-        lockBitstreamData.sliceOffsets = new unsigned int[m_stEncoderInput.numSlices];
+        lockBitstreamData.sliceOffsets = new unsigned int[m_stEncoderInput.sliceModeData];
 
     lockBitstreamData.outputBitstream = stThreadData.pOutputBfr->hBitstreamBuffer;
     lockBitstreamData.doNotWait = false;
@@ -1307,6 +1336,14 @@ void CNvEncoder::PrintEncodePresets(string &s) const
 	s = os.str();
 }
 
+void CNvEncoder::UseExternalCudaContext(const CUcontext context, const unsigned int device )
+{
+	m_cuContext = context;
+	m_deviceID  = device;
+	assert (context != NULL);
+	m_useExternalContext = true;
+}
+
 HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const unsigned int deviceID, NVENCSTATUS &nvStatus )
 {
     HRESULT hr = S_OK;
@@ -1319,10 +1356,6 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
     unsigned int uArraysize = 0;
     SET_VER(stCapsParam, NV_ENC_CAPS_PARAM);
     SET_VER(stEncodeSessionParams, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS);
-
-	GUID clientKey = NVENC_KEY ;
-    stEncodeSessionParams.apiVersion = NVENCAPI_VERSION;
-    stEncodeSessionParams.clientKeyPtr = &clientKey;
 
 	// If another NVENC session is already open, close it (to avoid mem-leak)
 	DestroyEncodeSession();
@@ -1351,7 +1384,8 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
         break;
 #endif
         case NV_ENC_CUDA:
-            InitCuda(deviceID);
+			if ( !m_useExternalContext )
+				InitCuda(deviceID);
             stEncodeSessionParams.device = reinterpret_cast<void *>(m_cuContext);
             stEncodeSessionParams.deviceType = NV_ENC_DEVICE_TYPE_CUDA;
         break;
@@ -1476,11 +1510,11 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
             for (idx = 0; idx < m_dwInputFmtCount; idx++)
             {
                 // check if this HW-codec supports the requested (framebuffer) InputFormat 
-                if (encodeConfig.chromaFormatIDC == NV_ENC_BUFFER_FORMAT_NV12_PL &&
+                if (encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_420 &&
 						m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16 ||
-					   encodeConfig.chromaFormatIDC == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16 &&
+						encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_420 &&
 						m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16 ||
-                       encodeConfig.chromaFormatIDC == NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16 &&
+						encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_444 &&
                         m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16)
                 {
 		            m_dwInputFormat = m_pAvailableSurfaceFmts[idx];
@@ -1512,7 +1546,6 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
         checkNVENCErrors(nvStatus);
     }
 
-	m_deviceID = deviceID;
     return hr;
 }
 
@@ -1522,24 +1555,22 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
 //                        (1) creating NVENC session
 //                        (2) calling several query APIs (and storing the query-result in this class)
 //                        (3) destroying the session
-NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_caps_s &nv_enc_caps)
+NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_caps_s &nv_enc_caps, const bool destroy_on_exit)
 {
-    HRESULT hr = S_OK;
-    NVENCSTATUS nvStatus = NV_ENC_SUCCESS;
-    NV_ENC_CAPS_PARAM stCapsParam = {0};
-    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS stEncodeSessionParams = {0};
-    unsigned int uArraysize = 0;
-    SET_VER(stCapsParam, NV_ENC_CAPS_PARAM);
-    SET_VER(stEncodeSessionParams, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS);
+	HRESULT hr = S_OK;
+	NVENCSTATUS nvStatus = NV_ENC_SUCCESS;
+	NV_ENC_CAPS_PARAM stCapsParam = { 0 };
+	NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS stEncodeSessionParams = { 0 };
+	unsigned int uArraysize = 0;
+	SET_VER(stCapsParam, NV_ENC_CAPS_PARAM);
+	SET_VER(stEncodeSessionParams, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS);
 
-	GUID clientKey = NVENC_KEY ;
-    stEncodeSessionParams.apiVersion = NVENCAPI_VERSION;
-    stEncodeSessionParams.clientKeyPtr = &clientKey;
+	stEncodeSessionParams.apiVersion = NVENCAPI_VERSION;
 
 	// always use CUDA interface
-    InitCuda(deviceID);
-    stEncodeSessionParams.device = reinterpret_cast<void *>(m_cuContext);
-    stEncodeSessionParams.deviceType = NV_ENC_DEVICE_TYPE_CUDA;
+	InitCuda(deviceID);
+	stEncodeSessionParams.device = reinterpret_cast<void *>(m_cuContext);
+	stEncodeSessionParams.deviceType = NV_ENC_DEVICE_TYPE_CUDA;
 
 	// If another NVENC session is already open, close it (to avoid mem-leak)
 	DestroyEncodeSession();
@@ -1550,13 +1581,13 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 	//      supported input (framebuffer) pixel format
 	//      supported encoding modes, profiles, encoder features (B-frames, cabac, etc.)
 
-    nvStatus = m_pEncodeAPI->nvEncOpenEncodeSessionEx( &stEncodeSessionParams, &m_hEncoder);
-    if (nvStatus != NV_ENC_SUCCESS)
-    {
-        my_printf("nvEncOpenEncodeSessionEx() returned with error %d\n", nvStatus);
-        printf("Note: GUID key may be invalid or incorrect.  Recommend to upgrade your drivers and obtain a new key\n");
-        //checkNVENCErrors(nvStatus); // don't call exit(), otherwise Premiere plugin will quit without saying why
-        return nvStatus;
+	nvStatus = m_pEncodeAPI->nvEncOpenEncodeSessionEx(&stEncodeSessionParams, &m_hEncoder);
+	if (nvStatus != NV_ENC_SUCCESS)
+	{
+		my_printf("nvEncOpenEncodeSessionEx() returned with error %d\n", nvStatus);
+		printf("Note: GUID key may be invalid or incorrect.  Recommend to upgrade your drivers and obtain a new key\n");
+		//checkNVENCErrors(nvStatus); // don't call exit(), otherwise Premiere plugin will quit without saying why
+		return nvStatus;
 	}
 
 	// Enumerate the codec support by the HW Encoder
@@ -1566,11 +1597,11 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 		my_printf("nvEncGetEncodeGUIDCount() returned with error %d\n", nvStatus);
 		checkNVENCErrors(nvStatus);
 		DestroyEncodeSession();
-        return nvStatus;
-	} 
+		return nvStatus;
+	}
 
-	delete_array( m_stEncodeGUIDArray );
-	m_stEncodeGUIDArray       = new GUID[m_dwEncodeGUIDCount];
+	delete_array(m_stEncodeGUIDArray);
+	m_stEncodeGUIDArray = new GUID[m_dwEncodeGUIDCount];
 	memset(m_stEncodeGUIDArray, 0, sizeof(GUID) * m_dwEncodeGUIDCount);
 	uArraysize = 0;
 	nvStatus = m_pEncodeAPI->nvEncGetEncodeGUIDs(m_hEncoder, m_stEncodeGUIDArray, m_dwEncodeGUIDCount, &uArraysize);
@@ -1583,8 +1614,35 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 		return nvStatus;
 	}
 
-	// Enumerate the profile(s) available for selected codec <m_stEncodeGUID>
-	nvStatus = m_pEncodeAPI->nvEncGetEncodeProfileGUIDCount(m_hEncoder, m_stEncodeGUID, &m_dwCodecProfileGUIDCount);
+	if ( destroy_on_exit )
+		DestroyEncodeSession();
+
+	return nvStatus;
+}
+
+NVENCSTATUS CNvEncoder::QueryEncodeSessionCodec(const unsigned int deviceID, const NvEncodeCompressionStd codec, nv_enc_caps_s &nv_enc_caps)
+{
+    HRESULT hr = S_OK;
+    NVENCSTATUS nvStatus = NV_ENC_SUCCESS;
+    NV_ENC_CAPS_PARAM stCapsParam = {0};
+    NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS stEncodeSessionParams = {0};
+    unsigned int uArraysize = 0;
+    SET_VER(stCapsParam, NV_ENC_CAPS_PARAM);
+    SET_VER(stEncodeSessionParams, NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS);
+	const GUID codecGUID = GetCodecGUID(codec);
+
+	nvStatus = QueryEncodeSession( deviceID, nv_enc_caps, false );
+	if (nvStatus != NV_ENC_SUCCESS) {
+		DestroyEncodeSession();
+		return nvStatus;
+	}
+
+	stEncodeSessionParams.apiVersion = NVENCAPI_VERSION;
+	stEncodeSessionParams.device = reinterpret_cast<void *>(m_cuContext);
+	stEncodeSessionParams.deviceType = NV_ENC_DEVICE_TYPE_CUDA;
+
+	// Enumerate the profile(s) available for selected <codec>
+	nvStatus = m_pEncodeAPI->nvEncGetEncodeProfileGUIDCount(m_hEncoder, codecGUID, &m_dwCodecProfileGUIDCount);
 	if (nvStatus != NV_ENC_SUCCESS)
 	{
 		my_printf( "nvEncGetEncodeProfileGUIDCount() returned with error %d\n", nvStatus);
@@ -1597,7 +1655,7 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 	m_stCodecProfileGUIDArray = new GUID[m_dwCodecProfileGUIDCount];
 	memset(m_stCodecProfileGUIDArray, 0, sizeof(GUID) * m_dwCodecProfileGUIDCount);
 	uArraysize = 0;
-	nvStatus = m_pEncodeAPI->nvEncGetEncodeProfileGUIDs(m_hEncoder,  m_stEncodeGUID, m_stCodecProfileGUIDArray, m_dwCodecProfileGUIDCount, &uArraysize);
+	nvStatus = m_pEncodeAPI->nvEncGetEncodeProfileGUIDs(m_hEncoder, codecGUID, m_stCodecProfileGUIDArray, m_dwCodecProfileGUIDCount, &uArraysize);
 	assert(uArraysize <= m_dwCodecProfileGUIDCount);
 	if (nvStatus != NV_ENC_SUCCESS)
 	{
@@ -1607,8 +1665,8 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 		return nvStatus;
 	}
 
-	// Enumerate the (framebuffer) InputFormats available for selected codec <m_stEncodeGUID>
-	nvStatus =  m_pEncodeAPI->nvEncGetInputFormatCount(m_hEncoder, m_stEncodeGUID, &m_dwInputFmtCount);
+	// Enumerate the (framebuffer) InputFormats available for selected <codec>
+	nvStatus = m_pEncodeAPI->nvEncGetInputFormatCount(m_hEncoder, codecGUID, &m_dwInputFmtCount);
 	if (nvStatus != NV_ENC_SUCCESS)
 	{
 		my_printf("nvEncGetInputFormatCount() returned with error %d\n", nvStatus);
@@ -1620,7 +1678,7 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 	delete_array( m_pAvailableSurfaceFmts );
 	m_pAvailableSurfaceFmts = new NV_ENC_BUFFER_FORMAT[m_dwInputFmtCount];
 	memset(m_pAvailableSurfaceFmts, 0, sizeof(NV_ENC_BUFFER_FORMAT) * m_dwInputFmtCount);
-	nvStatus = m_pEncodeAPI->nvEncGetInputFormats(m_hEncoder, m_stEncodeGUID, m_pAvailableSurfaceFmts, m_dwInputFmtCount, &uArraysize);
+	nvStatus = m_pEncodeAPI->nvEncGetInputFormats(m_hEncoder, codecGUID, m_pAvailableSurfaceFmts, m_dwInputFmtCount, &uArraysize);
 	if (nvStatus != NV_ENC_SUCCESS)
 	{
 		my_printf("nvEncGetInputFormats() returned with error %d\n", nvStatus);
@@ -1639,7 +1697,7 @@ NVENCSTATUS CNvEncoder::QueryEncodeSession(const unsigned int deviceID, nv_enc_c
 		return nvStatus;
     }
 
-	hr = QueryEncoderCaps( nv_enc_caps );
+	hr = _QueryEncoderCaps( codecGUID, nv_enc_caps );
 	DestroyEncodeSession();
     return nvStatus;
 }
@@ -1653,7 +1711,7 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
 
         // Parameters that are send to NVENC hardware
         p_nvEncoderConfig->codec            = NV_ENC_H264;
-        p_nvEncoderConfig->profile          = NV_ENC_H264_PROFILE_HIGH;// 66=baseline, 77=main, 100=high, 128=stereo (need to also set stereo3d bits below)
+        p_nvEncoderConfig->profile          = NV_ENC_CODEC_PROFILE_AUTOSELECT;
         p_nvEncoderConfig->width            = 720; // this should be init to agree with AME default
         p_nvEncoderConfig->height           = 480; // this should be init to agree with AME default
 		p_nvEncoderConfig->frameRateNum     = 24000; // fps = 23.976
@@ -1668,23 +1726,29 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
         p_nvEncoderConfig->FieldEncoding    = NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME; // 0=off (progressive), either set to 0 or 2
 		p_nvEncoderConfig->rateControl      = NV_ENC_PARAMS_RC_CBR; // Constant Bitrate
 
+		p_nvEncoderConfig->enableLTR        = 0;    // long term reference frames (only supported in HEVC)
+		p_nvEncoderConfig->ltrNumFrames     = 0;
+		p_nvEncoderConfig->ltrTrustMode     = 0;
+
 		// For ConstQP rate-control only
         //p_nvEncoderConfig->qp               = 24;// not used?
         p_nvEncoderConfig->qpI              = 21;
         p_nvEncoderConfig->qpP              = 23;
         p_nvEncoderConfig->qpB              = 24;
 
-		// for VariableQP rate-control only:  MAX indicates highest-values (this corresponds to worse quality)
+		// for VariableQP rate-control only:  MAX indicates highest QP-value NVENC will use
+		//                                    (coarsest or lowest-qual quantizer)
         p_nvEncoderConfig->max_qp_ena       = 0;// flag: enable max_qp?
-        p_nvEncoderConfig->max_qpI          = 23;
-        p_nvEncoderConfig->max_qpP          = 24;
-        p_nvEncoderConfig->max_qpB          = 25;
+        p_nvEncoderConfig->max_qpI          = 51;// (for H264: maximum QP = 51) 
+        p_nvEncoderConfig->max_qpP          = 51;// (   ... lowest quality)
+        p_nvEncoderConfig->max_qpB          = 51;
 
-		// for VariableQP rate-control only:  MIN indicates lowest -values (this corresponds to better quality)
-        p_nvEncoderConfig->min_qp_ena       = 0;// flag: enable min_qp?
-        p_nvEncoderConfig->min_qpI          = 19;
-        p_nvEncoderConfig->min_qpP          = 20;
-        p_nvEncoderConfig->min_qpB          = 21;
+		// for VariableQP rate-control only:  MIN indicates lowest-values (corresponds to h quality)
+		//                                    (finest or highest-qual quantizer)
+		p_nvEncoderConfig->min_qp_ena       = 0;// flag: enable min_qp?
+        p_nvEncoderConfig->min_qpI          = 0;// (for H264: minimum QP = 0)
+        p_nvEncoderConfig->min_qpP          = 0;// (   ... highest quality)
+        p_nvEncoderConfig->min_qpB          = 0;
 
 		// for VariableQP rate-control only:  initial indicates starting-values (for frame#0)
         p_nvEncoderConfig->initial_qp_ena   = 0;// flag: enable initial_qp?
@@ -1703,12 +1767,13 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
 
 		p_nvEncoderConfig->stereo3dMode     = 0;
         p_nvEncoderConfig->stereo3dEnable   = 0;
-        p_nvEncoderConfig->numSlices        = 1;   // 1 slice per frame
+		p_nvEncoderConfig->sliceMode        = 3;
+        p_nvEncoderConfig->sliceModeData    = 1;// 1 slice per frame
         p_nvEncoderConfig->level            = NV_ENC_LEVEL_AUTOSELECT;
-        p_nvEncoderConfig->idr_period       = p_nvEncoderConfig->gopLength;
+		p_nvEncoderConfig->idr_period       = p_nvEncoderConfig->gopLength;
         p_nvEncoderConfig->vle_entropy_mode = NV_ENC_H264_ENTROPY_CODING_MODE_CABAC; // 0==cavlc, 1==cabac
-        p_nvEncoderConfig->chromaFormatIDC  = NV_ENC_BUFFER_FORMAT_NV12_PL;  // 1 = YUV4:2:0, 3 = YUV4:4:4
-		p_nvEncoderConfig->useChroma444hack = 1; // (for 4:4:4 only) 
+//		p_nvEncoderConfig->chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_PL;  // 1 = YUV4:2:0, 3 = YUV4:4:4
+		p_nvEncoderConfig->chromaFormatIDC = cudaVideoChromaFormat_420;  // 1 = YUV4:2:0, 3 = YUV4:4:4
 		p_nvEncoderConfig->separateColourPlaneFlag = 0;
         p_nvEncoderConfig->output_sei_BufferPeriod = 0;
         p_nvEncoderConfig->mvPrecision      = NV_ENC_MV_PRECISION_QUARTER_PEL;
@@ -1717,7 +1782,7 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
         p_nvEncoderConfig->aud_enable              = 0;
         p_nvEncoderConfig->report_slice_offsets    = 0; // Default dont report slice offsets for nvEncodeAPP.
         p_nvEncoderConfig->enableSubFrameWrite     = 0; // Default do not flust to memory at slice end
-        p_nvEncoderConfig->disable_deblocking      = 0;
+        p_nvEncoderConfig->disableDeblock          = 0;
         p_nvEncoderConfig->disable_ptd             = 0;
         p_nvEncoderConfig->adaptive_transform_mode = NV_ENC_H264_ADAPTIVE_TRANSFORM_AUTOSELECT;
         p_nvEncoderConfig->bdirectMode             = NV_ENC_H264_BDIRECT_MODE_SPATIAL;
@@ -1737,11 +1802,22 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
 		// NVENC API 4.0
 		p_nvEncoderConfig->qpPrimeYZeroTransformBypassFlag = 0; //  enable lossless encode set this to 1
 		p_nvEncoderConfig->enableAQ         = 0; // adaptive quantization (default=off)
+
+		// NVENC API 5.0
+		p_nvEncoderConfig->tier             = NV_ENC_TIER_HEVC_MAIN;   // (HEVC-only)
+		p_nvEncoderConfig->minCUsize        = NV_ENC_HEVC_CUSIZE_AUTOSELECT;// (HEVC-only)
+		p_nvEncoderConfig->maxCUsize        = NV_ENC_HEVC_CUSIZE_AUTOSELECT;// (HEVC-only)
     }
 }
 
 HRESULT
-CNvEncoder::QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps )
+CNvEncoder::QueryEncoderCaps(nv_enc_caps_s &nv_enc_caps)
+{
+	return _QueryEncoderCaps( m_stEncodeGUID, nv_enc_caps );
+}
+
+HRESULT
+CNvEncoder::_QueryEncoderCaps( const GUID &codecGUID, nv_enc_caps_s &nv_enc_caps )
 {
 	NV_ENC_CAPS_PARAM stCapsParam = {0};
     NVENCSTATUS nvStatus = NV_ENC_SUCCESS;
@@ -1751,7 +1827,7 @@ CNvEncoder::QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps )
 #define QUERY_CAPS(CAPS) \
 	result = 0; \
     stCapsParam.capsToQuery = CAPS; \
-	nvStatus = m_pEncodeAPI->nvEncGetEncodeCaps(m_hEncoder, m_stEncodeGUID, &stCapsParam, &result); \
+	nvStatus = m_pEncodeAPI->nvEncGetEncodeCaps(m_hEncoder, codecGUID, &stCapsParam, &result); \
 	if ( nvStatus == NV_ENC_SUCCESS ) \
 		nv_enc_caps.value_ ## CAPS = result; \
 	else \
@@ -1773,7 +1849,7 @@ CNvEncoder::QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps )
     QUERY_CAPS(NV_ENC_CAPS_SUPPORT_BDIRECT_MODE);
     QUERY_CAPS(NV_ENC_CAPS_SUPPORT_CABAC);
     QUERY_CAPS(NV_ENC_CAPS_SUPPORT_ADAPTIVE_TRANSFORM);
-    QUERY_CAPS(NV_ENC_CAPS_SUPPORT_STEREO_MVC);
+//  QUERY_CAPS(NV_ENC_CAPS_SUPPORT_RESERVED);
     QUERY_CAPS(NV_ENC_CAPS_NUM_MAX_TEMPORAL_LAYERS);
     QUERY_CAPS(NV_ENC_CAPS_SUPPORT_HIERARCHICAL_PFRAMES);
     QUERY_CAPS(NV_ENC_CAPS_SUPPORT_HIERARCHICAL_BFRAMES);
@@ -1795,8 +1871,8 @@ CNvEncoder::QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps )
     QUERY_CAPS(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
     QUERY_CAPS(NV_ENC_CAPS_PREPROC_SUPPORT);
     QUERY_CAPS(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
-	QUERY_CAPS(NV_ENC_CAPS_MB_NUM_MAX);     // still fails with Geforce 340.52 driver
-	QUERY_CAPS(NV_ENC_CAPS_MB_PER_SEC_MAX );// still fails with Geforce 340.52 driver
+	QUERY_CAPS(NV_ENC_CAPS_MB_NUM_MAX);
+	QUERY_CAPS(NV_ENC_CAPS_MB_PER_SEC_MAX );
 	QUERY_CAPS(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE );
 	QUERY_CAPS(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE );
 
@@ -1807,16 +1883,47 @@ void EncodeConfig::print( string &stringout ) const {
 	string s;
 	ostringstream os;
 
+	const bool codec_is_h264 = (codec == NV_ENC_H264);
+	const bool codec_is_hevc = (codec == NV_ENC_H265);
+
 #define PRINT_DEC(var) os << "" #var ": " << std::dec << var;
 #define PRINT_HEX(var) os << "" #var ": 0x" << std::hex << var;
 
 	desc_nv_enc_codec_names.value2string(codec, s);
 	PRINT_DEC(codec)
-	os << " (" << s << ")";
+	os << " (" << s << "_GUID)";
 	os << endl;
 
 	desc_nv_enc_profile_names.value2string(profile, s);
 	PRINT_DEC(profile)
+	os << " (" << s << ")";
+	os << endl;
+
+	if (codec_is_h264)
+		desc_nv_enc_level_h264_names.value2string(level, s);
+	else if (codec_is_hevc)
+		desc_nv_enc_level_hevc_names.value2string(level, s);
+	else
+		desc_nv_enc_level_hevc_names.value2string(level, s); // assume H265
+	PRINT_DEC(level)
+	os << " (" << s << ")" << endl;
+
+	if (codec_is_hevc) {
+		desc_nv_enc_tier_hevc_names.value2string(tier, s);
+		PRINT_DEC(tier)
+		os << " (" << s << ")" << endl;
+
+		desc_nv_enc_hevc_cusize_names.value2string(minCUsize, s);
+		PRINT_DEC(minCUsize)
+		os << " (" << s << ")" << endl;
+
+		desc_nv_enc_hevc_cusize_names.value2string(maxCUsize, s);
+		PRINT_DEC(maxCUsize)
+		os << " (" << s << ")" << endl;
+	}
+
+	desc_nv_enc_preset_names.value2string(preset, s);
+	PRINT_DEC(preset)
 	os << " (" << s << ")";
 	os << endl;
 
@@ -1827,11 +1934,15 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(frameRateNum)
-	os << ",    ";
+	os << ", ";
 
 	PRINT_DEC(frameRateDen)
+	os << " (" << std::defaultfloat
+	   << (static_cast<float>(frameRateNum) / frameRateDen) << " fps), ";
+
+	PRINT_DEC(enableVFR)
 	os << endl;
-	
+
 	PRINT_DEC(darRatioX)
 	os << ",    ";
 
@@ -1858,6 +1969,7 @@ void EncodeConfig::print( string &stringout ) const {
 
 	if ( gopLength == NVENC_INFINITE_GOPLENGTH ) {
 		PRINT_HEX(gopLength) // infinite GOP
+		os << " (NVENC_INFINITE_GOPLENGTH)";
 	}
 	else {
 		PRINT_DEC(gopLength) // non-infinite GOP (value = #frames)
@@ -1865,6 +1977,17 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(monoChromeEncoding)
+	os << endl;
+
+	PRINT_DEC(enableLTR)
+	if (enableLTR) {
+		os << ", ";
+		PRINT_DEC(ltrNumFrames);
+		if (codec == NV_ENC_H264) {
+			os << ", ";
+			PRINT_DEC(ltrTrustMode);
+		}
+	}
 	os << endl;
 
 	PRINT_DEC(numBFrames)
@@ -1878,6 +2001,9 @@ void EncodeConfig::print( string &stringout ) const {
 	desc_nv_enc_ratecontrol_names.value2string(rateControl,s);
 	PRINT_DEC(rateControl)
 	os << " (" << s << ")";
+
+	os << ",   ";
+	PRINT_DEC(enableAQ)
 	os << endl;
 
 	PRINT_DEC(vbvBufferSize)
@@ -1891,116 +2017,104 @@ void EncodeConfig::print( string &stringout ) const {
 	if ( rateControl == NV_ENC_PARAMS_RC_CONSTQP ) {
 
 		PRINT_DEC(qpI)
-		os << ",    ";
+		os << ", ";
 
 		PRINT_DEC(qpP)
-		os << ",    ";
+		os << ", ";
 
 		PRINT_DEC(qpB)
 		os << endl;
 	}
 
 	// Min-QP rate-control parameters
-	// Are these parameters are only used in MinQP_VBR rate-control mode?!?
-	if ( rateControl == NV_ENC_PARAMS_RC_VBR_MINQP ) {
-		PRINT_DEC(min_qp_ena)
+	PRINT_DEC(min_qp_ena)
+	if ( min_qp_ena ) {
+		os << ", ";
+
+		PRINT_DEC(min_qpI)
+		os << ", ";
+
+		PRINT_DEC(min_qpP)
+		os << ", ";
+
+		PRINT_DEC(min_qpB)
 		os << endl;
-
-		if ( min_qp_ena ) {
-			PRINT_DEC(min_qpI)
-			os << ",    ";
-
-			PRINT_DEC(min_qpP)
-			os << ",    ";
-
-			PRINT_DEC(min_qpB)
-			os << endl;
-		}
-	} // rateControl == MINQP
+	}
 
 	PRINT_DEC(max_qp_ena)
-	os << endl;
-
 	if ( max_qp_ena ) {
+		os << ", ";
+
 		PRINT_DEC(max_qpI)
-		os << ",    ";
+		os << ", ";
 
 		PRINT_DEC(max_qpP)
-		os << ",    ";
+		os << ", ";
 
 		PRINT_DEC(max_qpB)
 		os << endl;
 	}
 
-	desc_nv_enc_h264_fmo_names.value2string(enableFMO,s);
-	PRINT_DEC(enableFMO)
-	os << " (" << s << ")";
-	os << endl;
-
-	desc_nv_enc_profile_names.value2string(application, s);
-	PRINT_DEC(application)
-	os << " (" << s << ")";
-	os << endl;
+	if (codec_is_h264) {
+		desc_nv_enc_h264_fmo_names.value2string(enableFMO, s);
+		PRINT_DEC(enableFMO)
+			os << " (" << s << ")";
+		os << endl;
+	}
 
 	PRINT_DEC(hierarchicalP)
-		os << ",    ";
+		os << ", ";
 
 	PRINT_DEC(hierarchicalB)
 	os << endl;
 
-	PRINT_DEC(svcTemporal)
-	os << endl;
+//	PRINT_DEC(svcTemporal)
+//	os << endl;
 
 	PRINT_DEC(outBandSPSPPS)
 	os << endl;
 
-	PRINT_DEC(viewId)
-	os << endl;
+//	PRINT_DEC(viewId)
+//	os << endl;
 
-	PRINT_DEC(stereo3dMode)
-	os << ",    ";
+//	PRINT_DEC(stereo3dMode)
+//	os << ",    ";
+//
+//	PRINT_DEC(stereo3dEnable)
+//	os << endl;
 
-	PRINT_DEC(stereo3dEnable)
-	os << endl;
+	PRINT_DEC(sliceMode)
+	os << ", ";
 
-	PRINT_DEC(numSlices)
-	os << endl;
-
-	desc_nv_enc_level_names.value2string(level, s);
-	PRINT_DEC(level)
-	os << " (" << s << ")";
+	PRINT_DEC(sliceModeData)
 	os << endl;
 
 	//PRINT_DEC(idr_period)
 	//os << endl;
 
-	desc_nv_enc_h264_entropy_coding_mode_names.value2string(vle_entropy_mode, s);
-	PRINT_DEC(vle_entropy_mode)
-	os << " (" << s << ")";
-	os << endl;
-
-	desc_nv_enc_buffer_format_names.value2string(chromaFormatIDC, s);
-	PRINT_DEC(chromaFormatIDC)
-	os << " (" << s << ")";
-	os << endl;
-
-	if ( IsYUV444Format(chromaFormatIDC) ) {
-		PRINT_DEC(useChroma444hack)
+	if (codec_is_h264) {
+		desc_nv_enc_h264_entropy_coding_mode_names.value2string(vle_entropy_mode, s);
+		PRINT_DEC(vle_entropy_mode)
+			os << " (" << s << ")";
 		os << endl;
-	}
+
+		desc_cudaVideoChromaFormat_names.value2string(chromaFormatIDC, s);
+		PRINT_DEC(chromaFormatIDC)
+			os << " (" << s << ")";
+		os << endl;
+	} // codec_is_h264
 
 	PRINT_DEC(separateColourPlaneFlag)
 	os << endl;
 
 	PRINT_DEC(output_sei_BufferPeriod)
-	os << endl;
+	os << ",   ";
 
+	PRINT_DEC(output_sei_PictureTime)
+	os << endl;
 	desc_nv_enc_mv_precision_names.value2string(mvPrecision, s);
 	PRINT_DEC(mvPrecision)
 	os << " (" << s << ")";
-	os << endl;
-
-	PRINT_DEC(output_sei_PictureTime)
 	os << endl;
 
 	PRINT_DEC(aud_enable)
@@ -2012,35 +2126,32 @@ void EncodeConfig::print( string &stringout ) const {
 	PRINT_DEC(enableSubFrameWrite)
 	os << endl;
 
-	PRINT_DEC(disable_deblocking)
+	PRINT_DEC(disableDeblock)
 	os << endl;
 
 	PRINT_DEC(disable_ptd)
 	os << endl;
 
-	desc_nv_enc_adaptive_transform_names.value2string(adaptive_transform_mode, s);
-	PRINT_DEC(adaptive_transform_mode)
-	os << " (" << s << ")";
-	os << endl;
+	if (codec_is_h264) {
+		desc_nv_enc_adaptive_transform_names.value2string(adaptive_transform_mode, s);
+		PRINT_DEC(adaptive_transform_mode)
+			os << " (" << s << ")";
+		os << endl;
 
-	desc_nv_enc_h264_bdirect_mode_names.value2string(bdirectMode, s);
-	PRINT_DEC(bdirectMode)
-	os << " (" << s << ")";
-	os << endl;
-
-	desc_nv_enc_preset_names.value2string(preset, s);
-	PRINT_DEC(preset)
-	os << " (" << s << ")";
-	os << endl;
+		desc_nv_enc_h264_bdirect_mode_names.value2string(bdirectMode, s);
+		PRINT_DEC(bdirectMode)
+			os << " (" << s << ")";
+		os << endl;
+	}
 
 	PRINT_DEC(maxWidth)
-		os << ",    ";
+	os << ", ";
 
 	PRINT_DEC(maxHeight)
 	os << endl;
 
 	PRINT_DEC(curWidth)
-		os << ",    ";
+	os << ", ";
 
 	PRINT_DEC(curHeight)
 	os << endl;
@@ -2058,16 +2169,24 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(max_ref_frames)
+	os << ", ";
+
+	PRINT_DEC(enableLTR)  // long term reference frames
+	if (enableLTR) {
+		os << ", ";
+		PRINT_DEC(ltrNumFrames)
+
+		if (codec == NV_ENC_H264) {
+			os << ", ";
+			PRINT_DEC(ltrTrustMode)
+		}
+	}
 	os << endl;
 
-	PRINT_DEC(enableVFR)
-	os << endl;
-
-	PRINT_DEC(enableAQ)
-	os << endl;
-
-	PRINT_DEC(qpPrimeYZeroTransformBypassFlag)
-	os << endl;
+	if (codec_is_h264) {
+		PRINT_DEC(qpPrimeYZeroTransformBypassFlag)
+			os << endl;
+	}
 
 	stringout = os.str();
 }

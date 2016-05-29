@@ -137,8 +137,14 @@
 		#define LParamID_NV_ENC_PRESET L"NV_ENC_PRESET"
 		#define ParamID_NV_ENC_H264_PROFILE "NV_ENC_H264_PROFILE"
 		#define LParamID_NV_ENC_H264_PROFILE L"NV_ENC_H264_PROFILE"
+		#define ParamID_NV_ENC_HEVC_PROFILE "NV_ENC_HEVC_PROFILE"
+		#define LParamID_NV_ENC_HEVC_PROFILE L"NV_ENC_HEVC_PROFILE"
 		#define ParamID_NV_ENC_LEVEL_H264 "NV_ENC_LEVEL_H264"
 		#define LParamID_NV_ENC_LEVEL_H264 L"NV_ENC_LEVEL_H264"
+		#define ParamID_NV_ENC_LEVEL_HEVC "NV_ENC_LEVEL_HEVC"
+		#define LParamID_NV_ENC_LEVEL_HEVC L"NV_ENC_LEVEL_HEVC"
+		#define ParamID_NV_ENC_TIER_HEVC "NV_ENC_TIER_HEVC"
+		#define LParamID_NV_ENC_TIER_HEVC L"NV_ENC_TIER_HEVC"
 		#define ParamID_gopLength "gopLength"
 		#define LParamID_gopLength L"gopLength"
 		#define ParamID_monoChromeEncoding "monoChromeEncoding"
@@ -186,24 +192,28 @@
 		#define LParamID_hierarchicalP L"hierarchicalP"
 		#define ParamID_hierarchicalB "hierarchicalB"
 		#define LParamID_hierarchicalB L"hierarchicalB"
-		#define ParamID_numSlices "numSlices"
-		#define LParamID_numSlices L"numSlices"
+		#define ParamID_sliceMode "sliceMode"
+		#define LParamID_sliceMode L"sliceMode"
+		#define ParamID_sliceModeData "sliceModeData"
+		#define LParamID_sliceModeData L"sliceModeData"
 		#define ParamID_vle_entropy_mode "vle_entropy_mode"
 		#define LParamID_vle_entropy_mode L"vle_entropy_mode"
 		#define ParamID_chromaFormatIDC "chromaFormatIDC"
 		#define LParamID_chromaFormatIDC L"chromaFormatIDC"
-		#define ParamID_useChroma444hack "useChroma444hack"
-		#define LParamID_useChroma444hack L"useChroma444hack"
 		#define ParamID_separateColourPlaneFlag "separateColourPlaneFlag"
 		#define LParamID_separateColourPlaneFlag L"separateColourPlaneFlag"
 		#define ParamID_NV_ENC_MV_PRECISION "NV_ENC_MV_PRECISION"
 		#define LParamID_NV_ENC_MV_PRECISION L"NV_ENC_MV_PRECISION"
-		#define ParamID_disable_deblocking "disable_deblocking"
-		#define LParamID_disable_deblocking L"disable_deblocking"
+		#define ParamID_disableDeblock "disableDeblock"
+		#define LParamID_disableDeblock L"disableDeblock"
 		#define ParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM "NV_ENC_H264_ADAPTIVE_TRANSFORM"
 		#define LParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM L"NV_ENC_H264_ADAPTIVE_TRANSFORM"
 		#define ParamID_NV_ENC_H264_BDIRECT_MODE "NV_ENC_H264_BDIRECT_MODE"
 		#define LParamID_NV_ENC_H264_BDIRECT_MODE L"NV_ENC_H264_BDIRECT_MODE"
+		#define ParamID_NV_ENC_HEVC_MINCUSIZE "minCUsize"
+		#define LParamID_NV_ENC_HEVC_MINCUSIZE L"minCUsize"
+		#define ParamID_NV_ENC_HEVC_MAXCUSIZE "maxCUsize"
+		#define LParamID_NV_ENC_HEVC_MAXCUSIZE L"maxCUsize"
 		#define ParamID_syncMode "syncMode"
 		#define LParamID_syncMode L"syncMode"
 		#define ParamID_enableVFR "enableVFR"
@@ -224,6 +234,8 @@
 
 		#define ParamID_BasicMux_MP4BOX_Button "MP4BOX_Button" // dialog-button, activates Path-select dialog-box
 
+		#define ParamID_BasicMux_MKVMERGE_Button "MPVMERGE_Button" // dialog-button, activates Path-select dialog-box
+
 #define		ADBEMPEGCodecBroadcastStandard "ADBEMPEGCodecBroadcastStandard" // ParamID TV-standard
 
 #define		ADBEMultiplexerTabGroup		"ADBEAudienceTabGroup" // top-level Mux group
@@ -234,11 +246,15 @@
 #define		MUX_MODE_M2T				5 // value to select "MPEG-2 TS mode" 
 #define		MUX_MODE_NONE				6 // value to select "disable mux" 
 #define		MUX_MODE_MP4				7 // *NVENC-only* value to select "MPEG-4 mode" 
+#define		MUX_MODE_MKV				8 // value to select "MKV mode" 
 #define		ParamID_BasicMux_TSMUXER_Path	"ParamID_BasicMux_TSMUXER_Path"
-#define		Default_BasicMux_TSMUXER_Path	L"C:\\TEMP\\TSMUXER\\TSMUXER.EXE"
+#define		Default_BasicMux_TSMUXER_Path	L"C:\\TEMP\\MEGUI\\TOOLS\\TSMUXER\\TSMUXER.EXE"
 
 #define		ParamID_BasicMux_MP4BOX_Path	"ParamID_BasicMux_MP4BOX_Path"
-#define		Default_BasicMux_MP4BOX_Path	L"C:\\TEMP\\MP4BOX\\MP4BOX.EXE"
+#define		Default_BasicMux_MP4BOX_Path	L"C:\\TEMP\\MEGUI\\TOOLS\\MP4BOX\\MP4BOX.EXE"
+
+#define		ParamID_BasicMux_MKVMERGE_Path	"ParamID_BasicMux_MKVMERGE_Path"
+#define		Default_BasicMux_MKVMERGE_Path	L"C:\\TEMP\\MEGUI\\TOOLS\\MKVMERGE\\MKVMERGE.EXE"
 
 prMALError exSDKGenerateDefaultParams(
 	exportStdParms				*stdParms, 
@@ -292,7 +308,7 @@ bool
 PrPixelFormat_is_YUV444( const PrPixelFormat p );
 
 void
-NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s);
+NVENC_GetEncoderCaps(const NvEncodeCompressionStd codec, const nv_enc_caps_s &caps, string &s);
 
 uint32_t
 NVENC_Calculate_H264_MaxKBitRate( 
@@ -301,10 +317,22 @@ NVENC_Calculate_H264_MaxKBitRate(
 );
 
 uint32_t
+NVENC_Calculate_HEVC_MaxKBitRate(
+	const NV_ENC_LEVEL level,
+	const NV_ENC_LEVEL tier
+);
+
+uint32_t
 NVENC_Calculate_H264_MaxRefFrames(
 //	NV_ENC_LEVEL level, 
 	int level,  // NV_ENC_LEVEL (H264)
 	const uint32_t pixels // total #pixels (width * height)
+);
+
+bool
+NVENC_legalize_codec_setting(
+	const csSDK_uint32 exID,
+	ExportSettings *lRec
 );
 
 prMALError

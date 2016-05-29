@@ -4,4 +4,8 @@
     <LocalDebuggerCommand>C:\Program Files\Adobe\Adobe Premiere Pro CC\Adobe Premiere Pro.exe</LocalDebuggerCommand>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LocalDebuggerCommand>C:\Program Files\Adobe\Adobe Premiere Pro CC\Adobe Premiere Pro.exe</LocalDebuggerCommand>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
 </Project>

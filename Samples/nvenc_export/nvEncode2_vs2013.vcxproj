@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -36,23 +36,23 @@
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v110</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -236,8 +236,6 @@
     <ClCompile Include="..\core\threads\NvThreadingWin32.cpp" />
     <ClCompile Include="..\nvEncode2\src\CNVEncoder.cpp" />
     <ClCompile Include="..\nvEncode2\src\CNVEncoderH264.cpp" />
-    <ClCompile Include="..\nvEncode2\src\CNVEncoderH265.cpp" />
-    <ClCompile Include="..\nvEncode2\src\crepackyuv.cpp" />
     <ClCompile Include="..\nvEncode2\src\guidutil2.cpp" />
     <ClCompile Include="..\nvEncode2\src\utilities.cpp" />
     <ClCompile Include="..\nvEncode2\src\xcodeutil.cpp" />
@@ -245,9 +243,6 @@
     <ClCompile Include="Exporter\SDK_Exporter.cpp" />
     <ClCompile Include="Exporter\SDK_Exporter_Params.cpp" />
     <ClCompile Include="Exporter\SDK_File.cpp" />
-    <ClCompile Include="Exporter\SDK_File_audio.cpp" />
-    <ClCompile Include="Exporter\SDK_File_mux.cpp" />
-    <ClCompile Include="Exporter\SDK_File_video.cpp" />
     <ClCompile Include="Exporter\SDK_Segment_Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -281,7 +276,6 @@
     <ClInclude Include="..\core\threads\NvThreadingWin32.h" />
     <ClInclude Include="..\nvEncode2\inc\CNVEncoder.h" />
     <ClInclude Include="..\nvEncode2\inc\CNVEncoderH264.h" />
-    <ClInclude Include="..\nvEncode2\inc\CNVEncoderH265.h" />
     <ClInclude Include="..\nvEncode2\inc\defines.h" />
     <ClInclude Include="..\nvEncode2\inc\guidutil2.h" />
     <ClInclude Include="..\nvEncode2\inc\xcodeutil.h" />
@@ -291,9 +285,6 @@
     <ClInclude Include="Exporter\SDK_Exporter.h" />
     <ClInclude Include="Exporter\SDK_Exporter_Params.h" />
     <ClInclude Include="Exporter\SDK_File.h" />
-    <ClInclude Include="Exporter\SDK_File_audio.h" />
-    <ClInclude Include="Exporter\SDK_File_mux.h" />
-    <ClInclude Include="Exporter\SDK_File_video.h" />
     <ClInclude Include="Exporter\SDK_Segment_Utils.h" />
     <ClInclude Include="Premiere_SDK_Headers\AE_CacheOnLoadSuite.h" />
     <ClInclude Include="Premiere_SDK_Headers\PrSDKAcceleratedRender.h" />

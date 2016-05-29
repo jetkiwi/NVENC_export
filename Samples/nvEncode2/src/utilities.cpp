@@ -20,6 +20,8 @@
 #include <include/helper_timer.h>
 #include <include/nvFileIO.h>
 
+#include <cuviddec.h> // cudaVideoChromaFormat
+
 #pragma warning (disable:4189)
 
 extern "C"
@@ -32,15 +34,14 @@ void printHelp()
     printf("> Encoder Test Application Parameters\n");
     printf(" <<Required Parameters>>\n");
     printf("   [-infile=input.mp4]    MPEG bitstream input (*.MP4, *.TS, *.M2TS)\n");
-    printf("   [-outfile=output.264]  Output elementary-stream H.264 Video filename\n");
+    printf("   [-outfile=output.264]  Output elementary-stream H.264(HEVC) Video filename\n");
 //  printf("   [-width=n]             Width  of video source (i.e. n = (704, 1280, 1920))\n");
 //  printf("   [-height=n]            Height of video source (i.e. n = (480,  720, 1080))\n");
     printf(" <<Optional Parameters>>\n");
-	printf("   [-use_gpuid=n]         Choose which GPU-device to run perform encoder (default==0) \n");
-	printf("   [-useall_gpus]         Selects *ALL* GPUs to perform encoding (default==no) \n");
+	printf("   [-device=n]            Select the CUDA-devicenum(GPUID#) to run decode/encode (default==0) \n");
+	printf("                   ...overrides display GPU device that is used to create an Encoder context.\n");
     printf("   [-darwidth=n]          DisplayAspectRatio Width  (default=infile's)\n");
     printf("   [-darheight=n]         DisplayAspectRatio Height (default=infile's)\n");
-//    printf("   [-device=n]            Override display GPU device that is used to create an Encoder context.\n");
     printf("   [-psnr=out_psnr.txt]   Output File Peak SNR\n");
     printf("   [-interface=n]         0=DX9, 1=DX11, 2=CUDA, 3=DX10 (default=2, don't change)\n");
     printf("   [-showCaps]            Display NVENC Hardware Capabilities detected\n");
@@ -51,8 +52,9 @@ void printHelp()
 
     printf("> NVENC Hardware Parameters\n");
     printf(" <<Required Parameters>>: See Video Encoder Interface Guide or (nvEncodeAPI.h) <\n");
-    printf("   [-codec=n]          Specify which codec to use, n=4 (H.264 is only supported)\n");
-    printf("   [-bitrate=n]        [VBR, CBR/2CBR, VBR_MinQP] Avg Video Bitrate of output file (eg: n=6000000 for 6 mbps)\n");
+    printf("   [-codec=n]          Specify which codec to use, %0d = H.264/AVC (default)\n", NV_ENC_H264);
+	printf("                         %0d = H.265/HEVC (requires Maxwell Gen2 or later hardware)\n", NV_ENC_H265);
+	printf("   [-bitrate=n]        [VBR, CBR/2CBR, VBR_MinQP] Avg Video Bitrate of output file (eg: n=6000000 for 6 mbps)\n");
     printf("      or [-kbitrate=n] ... Bitrate of output file (units=1000 bits, eg: n=6000 for 6 mbps)\n");
     printf("      or [-mbitrate=n] ... Bitrate of output file (units=million bits, eg: n=6 for 6 mbps)\n");
 	printf("   [-maxbitrate=n]     [not CBR/2CBR] Maximum Video Bitrate of output file (eg: n=6000000 for 6 mbps)\n");
@@ -69,15 +71,18 @@ void printHelp()
     printf("   [-goplength=n]      Specify GOP length (N=distance between I-Frames)\n");
     printf("                         (i.e. n=12 for GOP IBBPBBPBBPBBP)\n");
     printf("   [-monoChromeEncoding] (force black&white encoding, default==off)\n");
+	printf("       for all *qp* settings, <n> ranges from {0 .. 51}: 0=best quality, 51=lowest quality\n");
     printf("   [-qpALL=n]          [ConstantQP only] Quantization value for all frames\n");
     printf("   [-qpI=n]            [ConstantQP only] QP value for I-frames (overrides -qpALL)\n");
     printf("   [-qpB=n]            [ConstantQP only] QP value for B-frames (...)\n");
     printf("   [-qpP=n]            [ConstantQP only] QP value for P-frames (...)\n");
     printf("   [-min_qpALL=n]      [VBR_MinQP only] Min QP value for all frames\n");
+	printf("                       for 4kvideo, you should use -min_qpALL=0\n");
     printf("   [-min_qpI=n]        [VBR_MinQP only] Min QP value for I-frames (overrides -min_qpALL)\n");
     printf("   [-min_qpB=n]        [VBR_MinQP only] Min QP value for B-frames (...)\n");
     printf("   [-min_qpP=n]        [VBR_MinQP only] Min QP value for P-frames (...)\n");
     printf("   [-max_qpALL=n]      [?!?] Max QP value for all frames\n");
+	printf("                       for 4kvideo, you should use -max_qpALL=51\n");
     printf("   [-max_qpI=n]        [?!?] Max QP value for I-frames (overrides -max_qpALL)\n");
     printf("   [-max_qpB=n]        [?!?] Max QP value for B-frames (...)\n");
     printf("   [-max_qpP=n]        [?!?] Max QP value for P-frames (...)\n");
@@ -91,13 +96,14 @@ void printHelp()
     printf("   [-numlayers=n]      Number of layers for SVC (requires flag -svcTemporal=1) \n");
     printf("   [-outbandspspps=n]  Outband SPSPPS (1=enable, 0=disable)\n");
 //  printf("   [-mvc=n]            MultiView Codec (1=enable, 0=disable)\n");// not supported
-    printf("   [-profile=n]        H.264 Codec Profile (n=profile #)\n");
-    printf("                           %0d  = (Baseline)\n", NV_ENC_H264_PROFILE_BASELINE);
-    printf("                           %0d  = (Main Profile)\n", NV_ENC_H264_PROFILE_MAIN);
-    printf("                           %0d = (High Profile)\n", NV_ENC_H264_PROFILE_HIGH);
-//    printf("                           128 = (Stereo Profile)\n");// not suppported
-    printf("                           %0d = (High444 Predictive)\n", NV_ENC_H264_PROFILE_HIGH_444);
-    printf("                           %0d = (Constrained high)\n", NV_ENC_H264_PROFILE_CONSTRAINED_HIGH);
+    printf("   [-profile=n]        Codec Profile (n=profile #)\n");
+	printf("                           %0d = (H264/HEVC Autoseelct Profile) DEFAULT\n", NV_ENC_CODEC_PROFILE_AUTOSELECT);
+    printf("                           %0d = (H264 Baseline)\n", NV_ENC_H264_PROFILE_BASELINE);
+    printf("                           %0d = (H264 Main Profile)\n", NV_ENC_H264_PROFILE_MAIN);
+    printf("                           %0d = (H264 High Profile)\n", NV_ENC_H264_PROFILE_HIGH);
+	printf("                           %0d = (H264 High444 Predictive)\n", NV_ENC_H264_PROFILE_HIGH_444);
+	printf("                           %0d = (H264 Constrained high)\n", NV_ENC_H264_PROFILE_CONSTRAINED_HIGH);
+	printf("                           %0d = (HEVC Main Profile)\n", NV_ENC_HEVC_PROFILE_MAIN);
 //    printf("   [-stereo3dMode=n]   Stereo Mode Packing Mode\n");
 //    printf("                          0 = No Stereo Packing\n");
 //    printf("                          1 = Checkerboard\n");
@@ -107,8 +113,12 @@ void printHelp()
 //    printf("                          5 = Top-Bottom\n");
 //    printf("                          6 = Frame Sequential\n");
 //  printf("   [-stereo3dEnable=n] 3D Stereo (1=enable, 0=disable)\n");// not supported
-    printf("   [-numslices=n]      Specify Number of Slices to be encoded per Frame\n");
-    printf("   [-preset=n]         Specify the encoding preset (NVENC API %0u.%0u)\n", 
+	printf("   [-sliceMode=n]      determines how sliceModeData is interpreted\n");
+	printf("                       n=3  (# slices per picture)  DEFAULT\n");
+    printf("   [-sliceModeData=n]  Specify Number of Slices to be encoded per Frame\n");
+	printf("                       (default=1, lower#s give better efficiency.  Bluray 1080p\n");
+	printf("                       requires 4 slices\n");
+	printf("   [-preset=n]         Specify the encoding preset (NVENC API %0u.%0u)\n",
 		NVENCAPI_MAJOR_VERSION, NVENCAPI_MINOR_VERSION
 	);
     printf("                         -1 = No preset\n");
@@ -126,27 +136,38 @@ void printHelp()
     printf("                          1 = Required if using manual NVENC parameter settings\n");
     printf("   [-fieldmode=n]     Field Encoding Mode (0=Frame, 2=Field, 3=MBAFF)\n"); 
     printf("   [-maxNumRefFrames=n] Reference Frames (1..4: if Bframes enabled must be >= 2)\n");
+	printf("   [-ltrNumFrames=n]    #long term reference frames (if supported), 0=default\n");
     printf("   [-mvprecision=n]   Motion Vector Precision (1=full, 2=half, 3=quarter pixel) \n"); 
     printf("   [-enableFMO=n]     FMO Mode (0=Autoselect, 1=Enabled, 2=Disabled)\n"); 
     printf("   [-outputseiBufferPeriod=n]\n"); 
     printf("   [-outputseiPictureTime=n]\n"); 
     printf("   [-outputAud=n]\n"); 
-    printf("   [-level_idc=n]\n"); 
-    printf("   [-idrperiod=n]\n"); 
+	printf("   [-level_idc=n] %0d=auto (DEFAULT),\n", NV_ENC_LEVEL_AUTOSELECT);
+	printf("                  (H264: %0d = bluray/1080p30, %0d = 1080p60, %0d = 4k/2160p30)\n",
+		NV_ENC_LEVEL_H264_41, NV_ENC_LEVEL_H264_42, NV_ENC_LEVEL_H264_51
+	); 
+	printf("                  (HEVC: %0d = 1080p60, %0d = 4k/2160p30, %0d = 4k/2160p60)\n",
+		NV_ENC_LEVEL_HEVC_41, NV_ENC_LEVEL_HEVC_5, NV_ENC_LEVEL_HEVC_51
+	);
+	printf("   [-tier=n] <HEVC only>: %0d=main (default), %0d=high\n", NV_ENC_TIER_HEVC_MAIN, NV_ENC_TIER_HEVC_HIGH);
+	printf("   [-minCUsize=n], [-maxCUsize=n] <HEVC only>: %0d=auto (default)\n", NV_ENC_HEVC_CUSIZE_AUTOSELECT);
+	printf("                   %0d=8x8, %0d=16x16, %0d=32x32\n", NV_ENC_HEVC_CUSIZE_8x8, 
+		NV_ENC_HEVC_CUSIZE_16x16, NV_ENC_HEVC_CUSIZE_32x32
+	);
+	printf("   [-idrperiod=n]\n");
     printf("   [-cabacenable=n] (0=auto, 1=cabac, 2=cavlc)\n"); 
-    printf("   [-chromaformatIDC=n] (default=4:2:0, to encode in 4:4:4 instead, use n=4096)\n"); 
-    printf("   [-useChroma444hack]  (for 4:4:4 encoding, initialize NVENC using\n");
-	printf("                         format=3 (NV_ENC_BUFFER_FORMAT_NV12_TILED64x16)\n");
+	printf("   [-chromaformatIDC=n] (default=4:2:0, to encode in 4:4:4 instead, use n=%0d)\n", cudaVideoChromaFormat_444);
     printf("   [-separateColourPlaneFlag] (Requires PROFILE_HIGH_444)\n");
     printf("   [-reportsliceoffsets=n]\n"); 
     printf("   [-enableSubFrameWrite]\n"); 
     printf("   [-adaptiveTransformMode=n]  Adaptive Transform 8x8 mode (0=Autoselect, 1=Disabled, 2=Disabled)\n\n"); 
-    printf("   [-disabledeblocking]\n");
+    printf("   [-disableDeblock=n]  disable deblocking (default=0) (for H264: 0..2, for HEVC: 0..1)\n");
     printf("   [-disablePTD]\n"); 
 //    printf("   [-dynamicResChange]     (Enable Dynamic Resolution Changes)\n"); 
 //    printf("   [-dynamicBitrateChange] (Enable Dynamic Bitrate Changes)\n"); 
     printf("   [-enableVFR]            (Enable Variable Frame Rate Mode)\n"); 
-    printf("   [-enableAQ]             (for ConstQP/MinQP only: Enable adaptive quantization)\n"); 
+    printf("   [-enableAQ]             Enable adaptive quantization (QP)\n"); 
+	printf("                           (ignored if rcmode=ConstQP)\n");
     printf("   [-qpPrimeYZeroTransformBypassFlag] (required for lossless presets)\n");
 	printf("   [-vbvBufferSize=n]      (default==0)\n");
 	printf("   [-vbvInitialDelay=n]    (default==0)\n");
@@ -173,6 +194,9 @@ void initEncoderParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_nvEnc
 
     if (p_nvEncoderConfig) 
     {
+		// wipe clean the struct
+		memset((void *)p_nvEncoderConfig, 0, sizeof(*p_nvEncoderConfig));
+
         // Parameters that are send to NVENC hardware
         p_nvEncoderConfig->codec            = NV_ENC_H264;
         p_nvEncoderConfig->rateControl      = NV_ENC_PARAMS_RC_CBR; // Constant Bitrate
@@ -194,26 +218,26 @@ void initEncoderParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_nvEnc
         p_nvEncoderConfig->qpB              = 31;
         p_nvEncoderConfig->preset           = NV_ENC_PRESET_BD; // set to Bluray disc
         p_nvEncoderConfig->disableCodecCfg  = 0;
-        p_nvEncoderConfig->profile          = NV_ENC_H264_PROFILE_HIGH; // 66=baseline, 77=main, 100=high, 128=stereo (need to also set stereo3d bits below)
+        p_nvEncoderConfig->profile          = NV_ENC_CODEC_PROFILE_AUTOSELECT;
         p_nvEncoderConfig->stereo3dEnable   = 0;
         p_nvEncoderConfig->stereo3dMode     = 0;
         p_nvEncoderConfig->mvPrecision      = NV_ENC_MV_PRECISION_QUARTER_PEL;
         p_nvEncoderConfig->enableFMO        = NV_ENC_H264_FMO_AUTOSELECT;
-        p_nvEncoderConfig->numSlices        = 1;   // 1 slice per frame
+        p_nvEncoderConfig->sliceMode        = 3;
+        p_nvEncoderConfig->sliceModeData    = 1;   // (sliceMode=3): #slices per frame
         p_nvEncoderConfig->FieldEncoding    = NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME; // either set to 0 or 2
-        p_nvEncoderConfig->chromaFormatIDC  = NV_ENC_BUFFER_FORMAT_NV12_PL; // 1; // 1=4:2:0
-		p_nvEncoderConfig->useChroma444hack = 0;  // (for 4:4:4 only), use NV_ENC_BUFFER_FORMAT_NV12_TILED64x16 instead of NV_ENC_BUFFER_FORMAT_YUV444_PL
+		p_nvEncoderConfig->chromaFormatIDC  = cudaVideoChromaFormat_420; // 1=4:2:0, 3=4:4:4
         p_nvEncoderConfig->output_sei_BufferPeriod = 0;
         p_nvEncoderConfig->output_sei_PictureTime  = 0;
-        p_nvEncoderConfig->level                   = 0;
-        p_nvEncoderConfig->idr_period              = 30;
+        p_nvEncoderConfig->level                   = NV_ENC_LEVEL_AUTOSELECT;
+		p_nvEncoderConfig->idr_period = 30;
         p_nvEncoderConfig->vle_entropy_mode        = NV_ENC_H264_ENTROPY_CODING_MODE_AUTOSELECT;
         p_nvEncoderConfig->aud_enable              = 0;
         p_nvEncoderConfig->report_slice_offsets    = 0; // Default dont report slice offsets for nvEncodeAPP.
         p_nvEncoderConfig->enableSubFrameWrite     = 0; // Default do not flust to memory at slice end
         p_nvEncoderConfig->adaptive_transform_mode = NV_ENC_H264_ADAPTIVE_TRANSFORM_AUTOSELECT;
         p_nvEncoderConfig->bdirectMode             = NV_ENC_H264_BDIRECT_MODE_SPATIAL;
-        p_nvEncoderConfig->disable_deblocking      = 0;
+        p_nvEncoderConfig->disableDeblock          = 0;
         p_nvEncoderConfig->disable_ptd             = 0;
         p_nvEncoderConfig->useMappedResources      = 0;
         p_nvEncoderConfig->interfaceType           = NV_ENC_CUDA;  // Windows R304 (DX9 only), Windows R310 (DX10/DX11/CUDA), Linux R310 (CUDA only)
@@ -222,7 +246,16 @@ void initEncoderParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_nvEnc
         p_nvEncoderConfig->enableVFR               = 0;
 		p_nvEncoderConfig->qpPrimeYZeroTransformBypassFlag = 0;
 		p_nvEncoderConfig->enableAQ                = 0;
-    }
+
+		p_nvEncoderConfig->enableLTR               = 0; // enable long term reference frames
+		p_nvEncoderConfig->ltrNumFrames            = 0;
+		p_nvEncoderConfig->ltrTrustMode            = 0;
+
+		// (HEVC only)
+		p_nvEncoderConfig->tier = NV_ENC_TIER_HEVC_MAIN;
+		p_nvEncoderConfig->minCUsize = NV_ENC_HEVC_CUSIZE_AUTOSELECT;
+		p_nvEncoderConfig->maxCUsize = NV_ENC_HEVC_CUSIZE_AUTOSELECT;
+	}
 }
 
 // These are the initial parameters for the NVENC encoder
@@ -253,6 +286,10 @@ void parseCmdLineArguments(int argc, const char *argv[], EncoderAppParams *pEnco
         getCmdLineArgumentValue ( argc, (const char **)argv, "fieldmode",            &p_nvEncoderConfig->FieldEncoding      );
         getCmdLineArgumentValue ( argc, (const char **)argv, "bdirectmode",          &p_nvEncoderConfig->bdirectMode        );
         getCmdLineArgumentValue ( argc, (const char **)argv, "codec",                &p_nvEncoderConfig->codec              );
+
+		// If user selects HEVC codec, change the default profile to HEVC_PROFILE_MAIN
+		if (p_nvEncoderConfig->codec == NV_ENC_H265)
+			p_nvEncoderConfig->profile = NV_ENC_HEVC_PROFILE_MAIN;
         getCmdLineArgumentValue ( argc, (const char **)argv, "width",                &p_nvEncoderConfig->width              );
         getCmdLineArgumentValue ( argc, (const char **)argv, "height",               &p_nvEncoderConfig->height             );
         getCmdLineArgumentValue ( argc, (const char **)argv, "width",                &p_nvEncoderConfig->maxWidth           );
@@ -333,9 +370,12 @@ void parseCmdLineArguments(int argc, const char *argv[], EncoderAppParams *pEnco
         getCmdLineArgumentValue ( argc, (const char **)argv, "numlayers",            &p_nvEncoderConfig->numlayers          );
         getCmdLineArgumentValue ( argc, (const char **)argv, "outbandspspps",        &p_nvEncoderConfig->outBandSPSPPS      );
         getCmdLineArgumentValue ( argc, (const char **)argv, "profile",              &p_nvEncoderConfig->profile            ); //  H264: 66=baseline, 77=main, 100=high, 128=stereo (need to also set stereo3d bits below)
+        p_nvEncoderConfig->stereo3dEnable = checkCmdLineFlag ( argc, (const char **)argv, "stereo3dEnable" );
         getCmdLineArgumentValue ( argc, (const char **)argv, "stereo3dMode",         &p_nvEncoderConfig->stereo3dMode       );
-        getCmdLineArgumentValue ( argc, (const char **)argv, "stereo3dEnable",       &p_nvEncoderConfig->stereo3dEnable     );
-        getCmdLineArgumentValue ( argc, (const char **)argv, "numslices",            &p_nvEncoderConfig->numSlices          );
+		if ( p_nvEncoderConfig->stereo3dMode ) 
+			p_nvEncoderConfig->stereo3dEnable = 1;
+        getCmdLineArgumentValue ( argc, (const char **)argv, "sliceMode",            &p_nvEncoderConfig->sliceMode          );
+        getCmdLineArgumentValue ( argc, (const char **)argv, "sliceModeData",        &p_nvEncoderConfig->sliceModeData      );
         getCmdLineArgumentValue ( argc, (const char **)argv, "preset",               &p_nvEncoderConfig->preset             );
         getCmdLineArgumentValue ( argc, (const char **)argv, "disableCodecCfg"      ,&p_nvEncoderConfig->disableCodecCfg    );
         getCmdLineArgumentValue ( argc, (const char **)argv, "mvprecision"          ,&p_nvEncoderConfig->mvPrecision        );
@@ -347,17 +387,20 @@ void parseCmdLineArguments(int argc, const char *argv[], EncoderAppParams *pEnco
         getCmdLineArgumentValue ( argc, (const char **)argv, "idrperiod"            , &p_nvEncoderConfig->idr_period          );
         getCmdLineArgumentValue ( argc, (const char **)argv, "cabacenable"          , &p_nvEncoderConfig->vle_entropy_mode    );
         getCmdLineArgumentValue ( argc, (const char **)argv, "chromaformatIDC"      , &p_nvEncoderConfig->chromaFormatIDC     );
-		p_nvEncoderConfig->useChroma444hack   = checkCmdLineFlag ( argc, (const char **)argv, "useChroma444hack" );
 		p_nvEncoderConfig->separateColourPlaneFlag= checkCmdLineFlag ( argc, (const char **)argv, "separateColourPlaneFlag" );
         getCmdLineArgumentValue ( argc, (const char **)argv, "reportsliceoffsets"   , &p_nvEncoderConfig->report_slice_offsets);
         getCmdLineArgumentValue ( argc, (const char **)argv, "enableSubFrameWrite"  , &p_nvEncoderConfig->enableSubFrameWrite );
         getCmdLineArgumentValue ( argc, (const char **)argv, "adaptiveTransformMode", &p_nvEncoderConfig->adaptive_transform_mode                 );
         getCmdLineArgumentValue ( argc, (const char **)argv, "syncMode"             , &p_nvEncoderConfig->syncMode            );
         getCmdLineArgumentValue ( argc, (const char **)argv, "maxNumRefFrames"      , &p_nvEncoderConfig->max_ref_frames      );
-		p_nvEncoderConfig->enableVFR          = checkCmdLineFlag ( argc, (const char **)argv, "enableVFR" );
 
-        p_nvEncoderConfig->disable_ptd        = checkCmdLineFlag ( argc, (const char **)argv, "disablePTD" );
-        p_nvEncoderConfig->disable_deblocking = checkCmdLineFlag ( argc, (const char **)argv, "disabledeblocking"  );
+        rc = getCmdLineArgumentValue ( argc, (const char **)argv, "ltrNumFrames"         , &p_nvEncoderConfig->ltrNumFrames        );
+        rc |=getCmdLineArgumentValue ( argc, (const char **)argv, "ltrTrustMode"         , &p_nvEncoderConfig->ltrTrustMode        );
+		if (rc)
+			p_nvEncoderConfig->enableLTR = 1;
+
+		p_nvEncoderConfig->disable_ptd        = checkCmdLineFlag ( argc, (const char **)argv, "disablePTD" );
+        p_nvEncoderConfig->disableDeblock     = checkCmdLineFlag ( argc, (const char **)argv, "disableDeblock"  );
         p_nvEncoderConfig->useMappedResources = checkCmdLineFlag ( argc, (const char **)argv, "useMappedResources" );
 
 		getCmdLineArgumentValue(argc, (const char **)argv, "vbvBufferSize",         &p_nvEncoderConfig->vbvBufferSize);
@@ -365,7 +408,12 @@ void parseCmdLineArguments(int argc, const char *argv[], EncoderAppParams *pEnco
 
 		// NVENC API 3
 		p_nvEncoderConfig->enableVFR = checkCmdLineFlag ( argc, (const char **)argv, "enableVFR" );
-    }
+
+		// NVENC API 5 (HEVC codec only)
+		getCmdLineArgumentValue(argc, (const char **)argv, "tier",                  &p_nvEncoderConfig->tier     );
+		getCmdLineArgumentValue(argc, (const char **)argv, "minCUsize",             &p_nvEncoderConfig->minCUsize);
+		getCmdLineArgumentValue(argc, (const char **)argv, "maxCUsize",             &p_nvEncoderConfig->maxCUsize);
+	}
     // if peakBitrate or bufferSize are not specified, then we compute the recommended ones them
     if (p_nvEncoderConfig->peakBitRate == 0) {
         p_nvEncoderConfig->peakBitRate  = (p_nvEncoderConfig->avgBitRate * 4);
@@ -407,57 +455,119 @@ void parseCmdLineArguments(int argc, const char *argv[], EncoderAppParams *pEnco
 extern "C"
 void displayEncodingParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_nvEncoderConfig, int GPUID)
 {
-	if ( pEncodeAppParams == NULL )
+	const bool is_h264 = p_nvEncoderConfig->codec == NV_ENC_H264;
+	const bool is_h265 = p_nvEncoderConfig->codec == NV_ENC_H265;
+
+	std::string str, str2;
+
+	if (pEncodeAppParams == NULL)
 		printf("displayEncodingParams(): Error, NULL\n");
 #define NOT_NULL(x) ((x) == NULL) ? "NULL" : (x)
-	
-    printf("> NVEncode configuration parameters for Encoder[%d]\n", 0);
-    printf("> GPU Device ID             = %d",           pEncodeAppParams->nDeviceID);
-	printf(" %s\n", p_nvEncoderConfig[GPUID].enabled ? "(enabled)" : "(disabled)" );
-    printf("> Input File                = %s\n",           NOT_NULL(pEncodeAppParams->input_file));
-    printf("> Output File               = %s\n",           NOT_NULL(pEncodeAppParams->output_file));
-    printf("> Frames [%03d-%03d]          = %d frames \n", pEncodeAppParams->startFrame, pEncodeAppParams->endFrame-1, pEncodeAppParams->numFramesToEncode);
-    printf("> Multi-View Codec          = %s\n",           pEncodeAppParams->mvc ? "Yes" : "No");
 
-    printf("> Width,Height              = [%04d,%04d]\n",  p_nvEncoderConfig[GPUID].maxWidth, p_nvEncoderConfig[GPUID].maxHeight);
-    printf("> Video Output Codec        = %d - %s\n",      p_nvEncoderConfig[GPUID].codec, codec_names[p_nvEncoderConfig[GPUID].codec].name);
-    printf("> Average Bitrate           = %d (bps/sec)\n", p_nvEncoderConfig[GPUID].avgBitRate);
-    printf("> Peak Bitrate              = %d (bps/sec)\n", p_nvEncoderConfig[GPUID].peakBitRate);
+	printf("> NVEncode configuration parameters for Encoder[%d]\n", 0);
+	printf("> GPU Device ID             = (#%d) %d", GPUID, pEncodeAppParams->nDeviceID);
+	printf(" %s\n", p_nvEncoderConfig[GPUID].enabled ? "(enabled)" : "(disabled)");
+	printf("> Input File                = %s\n", NOT_NULL(pEncodeAppParams->input_file));
+	printf("> Output File               = %s\n", NOT_NULL(pEncodeAppParams->output_file));
+	printf("> Frame Rate (Num/Denom)    = (%d/%d) %4.4f fps", p_nvEncoderConfig[GPUID].frameRateNum, p_nvEncoderConfig[GPUID].frameRateDen, (float)p_nvEncoderConfig[GPUID].frameRateNum / (float)p_nvEncoderConfig[GPUID].frameRateDen);
+	if (is_h264 && p_nvEncoderConfig[GPUID].enableVFR) printf(" (enableVFR variable)");
+	printf("\n");
+	printf("> Frames [%03d-%03d]          = %d frames \n", pEncodeAppParams->startFrame, pEncodeAppParams->endFrame - 1, pEncodeAppParams->numFramesToEncode);
+
+	desc_nv_enc_codec_names.value2string(p_nvEncoderConfig[GPUID].codec, str);
+	printf("> Video Output Codec        = %d - %s_GUID\n", p_nvEncoderConfig[GPUID].codec, str.c_str() );
+	//  printf("> Multi-View Codec          = %s\n",           pEncodeAppParams->mvc ? "Yes" : "No");
+
+	desc_nv_enc_preset_names.value2string(p_nvEncoderConfig[GPUID].preset, str);
+	printf("> Encoder Preset            = %d - %s_GUID \"%s\"\n", p_nvEncoderConfig[GPUID].preset,
+		str.c_str(), preset_names[p_nvEncoderConfig[GPUID].preset].name );
+
+	desc_nv_enc_profile_names.value2string(p_nvEncoderConfig[GPUID].profile, str);
+	printf("> Video codec profile       = %d - %s_GUID\n", p_nvEncoderConfig[GPUID].profile, str.c_str());
+
+	if ( is_h265 ) {
+		desc_nv_enc_level_hevc_names.value2string(p_nvEncoderConfig[GPUID].level, str);
+		desc_nv_enc_tier_hevc_names.value2string(p_nvEncoderConfig[GPUID].tier, str2);
+		printf(">     level                 = %0d - %s\n", p_nvEncoderConfig[GPUID].level, str.c_str() );
+		printf(">     tier                  = %0d - %s\n", p_nvEncoderConfig[GPUID].tier, str2.c_str());
+	}
+	else {
+		desc_nv_enc_level_h264_names.value2string(p_nvEncoderConfig[GPUID].level, str);
+		printf(">     level                 = %0d - %0s\n", p_nvEncoderConfig[GPUID].level, str.c_str());
+	}
+
+	desc_nv_enc_ratecontrol_names.value2string(p_nvEncoderConfig[GPUID].rateControl, str);
+	printf("> Rate Control Mode         = %d - %s \"%s\"\n", p_nvEncoderConfig[GPUID].rateControl,
+		str.c_str(), ratecontrol_names[p_nvEncoderConfig[GPUID].rateControl].name);
+
+    printf("> Width x Height            = [%04d x %04d]\n",  p_nvEncoderConfig[GPUID].maxWidth, p_nvEncoderConfig[GPUID].maxHeight);
+	printf("> Average:Peak Bitrate      = %d : %d (bps/sec)\n", p_nvEncoderConfig[GPUID].avgBitRate, p_nvEncoderConfig[GPUID].peakBitRate);
     //printf("> BufferSize                = %d\n",           p_nvEncoderConfig[GPUID].bufferSize);
-    printf("> Rate Control Mode         = %d - %s\n",      p_nvEncoderConfig[GPUID].rateControl, ratecontrol_names[p_nvEncoderConfig[GPUID].rateControl].name);
 	printf("> vbvBufferSize             = %d\n",           p_nvEncoderConfig[GPUID].vbvBufferSize);
 	printf("> vbvInitialDelay           = %d\n",           p_nvEncoderConfig[GPUID].vbvInitialDelay);
 
-    printf("> Frame Rate (Num/Denom)    = (%d/%d) %4.4f fps", p_nvEncoderConfig[GPUID].frameRateNum, p_nvEncoderConfig[GPUID].frameRateDen, (float)p_nvEncoderConfig[GPUID].frameRateNum/(float)p_nvEncoderConfig[GPUID].frameRateDen);
-	if ( p_nvEncoderConfig[GPUID].enableVFR ) printf( " (variable)" );
+	printf("> GOP Length (#frames)      = %d\n",           p_nvEncoderConfig[GPUID].gopLength);
+    printf("> Number of BFrames(per GOP)= %d\n",           p_nvEncoderConfig[GPUID].numBFrames);
+    printf("> Display Aspect Ratio X/Y  = %d/%d\n",        p_nvEncoderConfig[GPUID].darRatioX, p_nvEncoderConfig[GPUID].darRatioY);
+
+	desc_nv_enc_h264_bdirect_mode_names.value2string(p_nvEncoderConfig[GPUID].bdirectMode, str);
+	printf("> bdirectMode               = %d (%s)\n", p_nvEncoderConfig[GPUID].bdirectMode, str.c_str() );
+
+	desc_nv_enc_h264_fmo_names.value2string(p_nvEncoderConfig[GPUID].enableFMO, str);
+	printf("> enableFMO                 = %d (%s)\n", p_nvEncoderConfig[GPUID].enableFMO, str.c_str());
+	//printf("> QP (All Frames)           = %d\n",           p_nvEncoderConfig[GPUID].qp);
+
+	if ( is_h264 ) {
+		desc_nv_enc_h264_entropy_coding_mode_names.value2string(p_nvEncoderConfig[GPUID].vle_entropy_mode, str);
+		printf("> vle_entropy_mode          = %d (%s)\n", p_nvEncoderConfig[GPUID].vle_entropy_mode, str.c_str());
+	}
+
+	desc_nv_enc_mv_precision_names.value2string(p_nvEncoderConfig[GPUID].mvPrecision, str);
+	printf("> mvPrecision               = %d (%s)\n", p_nvEncoderConfig[GPUID].mvPrecision, str.c_str());
+
+	desc_nv_enc_adaptive_transform_names.value2string(p_nvEncoderConfig[GPUID].adaptive_transform_mode, str);
+	printf("> adaptive_transform_mode   = %d (%s)\n", p_nvEncoderConfig[GPUID].adaptive_transform_mode, str.c_str());
+
+#define PRINT_QP_MIN_MAX(x) \
+	if (p_nvEncoderConfig[GPUID].min_qp_ena) \
+		printf(", min=%2d", p_nvEncoderConfig[GPUID].min_ ## x); \
+	else \
+		printf("          " ); \
+	if (p_nvEncoderConfig[GPUID].max_qp_ena) \
+		printf(", max=%2d", p_nvEncoderConfig[GPUID].max_ ## x); \
+	else \
+		printf("          "); \
 	printf("\n");
-    printf("> GOP Length                = %d\n",           p_nvEncoderConfig[GPUID].gopLength);
-    printf("> Number of B Frames        = %d\n",           p_nvEncoderConfig[GPUID].numBFrames);
-    printf("> Display Aspect Ratio X    = %d\n",           p_nvEncoderConfig[GPUID].darRatioX);
-    printf("> Display Aspect Ratio Y    = %d\n",           p_nvEncoderConfig[GPUID].darRatioY);
-    printf("> Number of B-Frames        = %d\n",           p_nvEncoderConfig[GPUID].numBFrames);
-    printf("> bdirectMode               = %d\n",           p_nvEncoderConfig[GPUID].bdirectMode);
-    //printf("> QP (All Frames)           = %d\n",           p_nvEncoderConfig[GPUID].qp);
-    printf("> QP (I-Frames)             = %d\n",           p_nvEncoderConfig[GPUID].qpI);
-    printf("> QP (P-Frames)             = %d\n",           p_nvEncoderConfig[GPUID].qpP);
-    printf("> QP (B-Frames)             = %d\n",           p_nvEncoderConfig[GPUID].qpB);
-    printf("> Hiearchical P-Frames      = %d\n",           p_nvEncoderConfig[GPUID].hierarchicalP);
-    printf("> Hiearchical B-Frames      = %d\n",           p_nvEncoderConfig[GPUID].hierarchicalB);
-    printf("> SVC Temporal Scalability  = %d\n",           p_nvEncoderConfig[GPUID].svcTemporal);
-    printf("> Number of Temporal Layers = %d\n",           p_nvEncoderConfig[GPUID].numlayers);
+
+    printf("> QP (I-Frames)             = %2d",           p_nvEncoderConfig[GPUID].qpI);
+		PRINT_QP_MIN_MAX(qpI)
+	printf("> QP (P-Frames)             = %2d", p_nvEncoderConfig[GPUID].qpP);
+		PRINT_QP_MIN_MAX(qpP)
+    printf("> QP (B-Frames)             = %2d",           p_nvEncoderConfig[GPUID].qpB);
+		PRINT_QP_MIN_MAX(qpB)
+
+    printf("> Enable Hiearchical P/B Fra= %d/%d\n",      p_nvEncoderConfig[GPUID].hierarchicalP,
+        p_nvEncoderConfig[GPUID].hierarchicalB);
+//    printf("> SVC Temporal Scalability  = %d\n",           p_nvEncoderConfig[GPUID].svcTemporal);
+//    printf("> Number of Temporal Layers = %d\n",           p_nvEncoderConfig[GPUID].numlayers);
     printf("> Outband SPSPPS            = %d\n",           p_nvEncoderConfig[GPUID].outBandSPSPPS);
-    printf("> Video codec profile       = %d\n",           p_nvEncoderConfig[GPUID].profile);
-    printf("> Stereo 3D Mode            = %d\n",           p_nvEncoderConfig[GPUID].stereo3dMode);
-    printf("> Stereo 3D Enable          = %s\n",           p_nvEncoderConfig[GPUID].stereo3dEnable  ? "Yes" : "No");
-    printf("> Number slices per Frame   = %d\n",           p_nvEncoderConfig[GPUID].numSlices);
-    printf("> Encoder Preset            = %d - %s\n",      p_nvEncoderConfig[GPUID].preset, preset_names[p_nvEncoderConfig[GPUID].preset].name);
+//    printf("> Stereo 3D Mode            = %d\n",           p_nvEncoderConfig[GPUID].stereo3dMode);
+//    printf("> Stereo 3D Enable          = %s\n",           p_nvEncoderConfig[GPUID].stereo3dEnable  ? "Yes" : "No");
+	printf("> sliceMode/Data            = %d/%d\n",        p_nvEncoderConfig[GPUID].sliceMode, p_nvEncoderConfig[GPUID].sliceModeData);
 #if defined (NV_WINDOWS)
     printf("> Asynchronous Mode         = %s\n",           p_nvEncoderConfig[GPUID].syncMode ? "Yes" : "No");
 #endif
     printf("> NVENC API Interface       = %d - %s\n",      p_nvEncoderConfig[GPUID].interfaceType, nvenc_interface_names[p_nvEncoderConfig[GPUID].interfaceType].name);
     printf("> Map Resource API Demo     = %s\n",           p_nvEncoderConfig[GPUID].useMappedResources ? "Yes" : "No");
-    printf("> enableVFR, enableAQ       = %s, %s\n",       p_nvEncoderConfig[GPUID].enableVFR ? "Yes" : "No",
-		                                                   p_nvEncoderConfig[GPUID].enableAQ ? "Yes" : "No");
+    printf("> enableAQ                  = %s\n",           p_nvEncoderConfig[GPUID].enableAQ ? "Yes" : "No");
+
+	if ( is_h265 ) {
+		desc_nv_enc_hevc_cusize_names.value2string(p_nvEncoderConfig->minCUsize, str);
+		desc_nv_enc_hevc_cusize_names.value2string(p_nvEncoderConfig->maxCUsize, str2);
+		printf("> minCUsize, maxCUsize      = %0d, %0d (%0s, %0s)",
+			p_nvEncoderConfig->minCUsize, p_nvEncoderConfig->maxCUsize, str.c_str(), str2.c_str()
+		);
+	}
 	getchar();
 }
 

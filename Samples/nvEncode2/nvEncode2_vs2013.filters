@@ -1,0 +1,123 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\core\threads\NvThreadingClasses.cpp" />
+    <ClCompile Include="..\core\threads\NvThreadingWin32.cpp" />
+    <ClCompile Include="src\CNVEncoderH264.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\main2.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\utilities.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\xcodeutil.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\CNVEncoder.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\cudaModuleMgr.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\cudaProcessFrame.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\FrameQueue.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\videoDecode.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\VideoDecoder.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\VideoParser.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="cudaDecodeD3D9\VideoSource.cpp">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClCompile>
+    <ClCompile Include="src\guidutil2.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\core\include\drvapi_error_string.h" />
+    <ClInclude Include="..\core\include\dynlink_d3d10.h" />
+    <ClInclude Include="..\core\include\dynlink_d3d11.h" />
+    <ClInclude Include="..\core\include\helper_cuda.h" />
+    <ClInclude Include="..\core\include\helper_cuda_drvapi.h" />
+    <ClInclude Include="..\core\include\helper_nvenc.h" />
+    <ClInclude Include="..\core\include\helper_string.h" />
+    <ClInclude Include="..\core\include\helper_timer.h" />
+    <ClInclude Include="..\core\include\multithreading.h" />
+    <ClInclude Include="..\..\include\nvEncodeAPI.h" />
+    <ClInclude Include="..\core\include\nvFileIO.h" />
+    <ClInclude Include="..\core\include\videoFormats.h" />
+    <ClInclude Include="..\core\threads\NvThreading.h" />
+    <ClInclude Include="..\core\threads\NvThreadingClasses.h" />
+    <ClInclude Include="..\core\threads\NvThreadingWin32.h" />
+    <ClInclude Include="..\core\include\NvAssert.h" />
+    <ClInclude Include="..\core\include\NvResult.h" />
+    <ClInclude Include="..\core\include\NvResultTable.h" />
+    <ClInclude Include="..\core\include\NvTypes.h" />
+    <ClInclude Include="cudaDecodeD3D9\cudaModuleMgr.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="cudaDecodeD3D9\cudaProcessFrame.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="cudaDecodeD3D9\FrameQueue.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="cudaDecodeD3D9\VideoDecode.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="cudaDecodeD3D9\VideoDecoder.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="cudaDecodeD3D9\VideoParser.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="cudaDecodeD3D9\VideoSource.h">
+      <Filter>cudaDecodeD3D9</Filter>
+    </ClInclude>
+    <ClInclude Include="inc\xcodevid.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="inc\CNVEncoder.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="inc\CNVEncoderH264.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="inc\xcodeutil.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include=".\inc\defines.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="inc\guidutil.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\inc\helper_functions.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{6904af1f-4777-465b-9f13-acbda2aecfc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="cudaDecodeD3D9">
+      <UniqueIdentifier>{753fe4a7-2044-4b2f-88e3-c789c4b0726c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="inc">
+      <UniqueIdentifier>{70f49fc1-007b-4e84-bde7-0e37a02365ac}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram1.cd" />
+  </ItemGroup>
+</Project>

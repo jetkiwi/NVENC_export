@@ -1,6 +1,4 @@
 /*
- * Copyright 1993-2013 NVIDIA Corporation.  All rights reserved.
- *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
  * this software. Any use, reproduction, disclosure, or distribution of
@@ -9,16 +7,16 @@
  *
  */
 
-#ifndef _NVENCODE_H264_H_
-#define _NVENCODE_H264_H_
+#ifndef _NVENCODE_H265_H_
+#define _NVENCODE_H265_H_
 
 #include <CNVEncoder.h>
 
-class CNvEncoderH264:public CNvEncoder
+class CNvEncoderH265:public CNvEncoder
 {
 public:
-    CNvEncoderH264();
-    ~CNvEncoderH264();
+    CNvEncoderH265();
+    ~CNvEncoderH265();
 protected:
     bool                                                 m_bMVC;
     unsigned int                                         m_dwViewId;
@@ -36,8 +34,7 @@ protected:
 
 public:
     virtual HRESULT                                      InitializeEncoder();
-//    virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui );
-	virtual HRESULT                                      InitializeEncoderCodec(void * const p);
+    virtual HRESULT                                      InitializeEncoderCodec( void * const p );
 	virtual HRESULT                                      ReconfigureEncoder(EncodeConfig EncoderReConfig);
 	virtual HRESULT                                      EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const bool bFlush);
     virtual HRESULT                                      EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUdeviceptr oFrame[], const unsigned int oFrame_pitch, bool bFlush=false);

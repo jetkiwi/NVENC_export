@@ -18,6 +18,10 @@
 #include <cstdio>
 #include <iostream>
 
+// CUDA utilities and system includes
+#include <helper_functions.h>
+#include <helper_cuda_drvapi.h>    // helper file for CUDA Driver API calls and error checking
+
 VideoSource::VideoSource(const std::string sFileName, FrameQueue *pFrameQueue): hVideoSource_(0)
 {
     // fill in SourceData struct as much as we can
@@ -42,7 +46,7 @@ VideoSource::VideoSource(const std::string sFileName, FrameQueue *pFrameQueue): 
     else 
         fclose(fpin);
     CUresult oResult = cuvidCreateVideoSource(&hVideoSource_, sFileName.c_str(), &oVideoSourceParameters);
-    assert(CUDA_SUCCESS == oResult);
+    checkCudaErrors(oResult);
 }
 
 VideoSource::~VideoSource()
@@ -58,7 +62,7 @@ VideoSource::ReloadVideo(const std::string sFileName, FrameQueue *pFrameQueue, V
     oSourceData_.hVideoParser = pVideoParser->hParser_;
     oSourceData_.pFrameQueue  = pFrameQueue;
 
-    cuvidDestroyVideoSource(hVideoSource_);
+    checkCudaErrors(cuvidDestroyVideoSource(hVideoSource_));
 
     CUVIDSOURCEPARAMS oVideoSourceParameters;
     // Fill parameter struct
@@ -68,7 +72,7 @@ VideoSource::ReloadVideo(const std::string sFileName, FrameQueue *pFrameQueue, V
     oVideoSourceParameters.pfnAudioDataHandler = 0;
     // now create the actual source
     CUresult oResult = cuvidCreateVideoSource(&hVideoSource_, sFileName.c_str(), &oVideoSourceParameters);
-    assert(CUDA_SUCCESS == oResult);
+    checkCudaErrors(oResult);
 }
 
 
@@ -78,7 +82,7 @@ const
 {
     CUVIDEOFORMAT oFormat;
     CUresult oResult = cuvidGetSourceVideoFormat(hVideoSource_, &oFormat, 0);
-    assert(CUDA_SUCCESS == oResult);
+    checkCudaErrors(oResult);
 
     return oFormat;
 }
@@ -118,14 +122,14 @@ void
 VideoSource::start()
 {
     CUresult oResult = cuvidSetVideoSourceState(hVideoSource_, cudaVideoState_Started);
-    assert(CUDA_SUCCESS == oResult);
+    checkCudaErrors(oResult);
 }
 
 void
 VideoSource::stop()
 {
     CUresult oResult = cuvidSetVideoSourceState(hVideoSource_, cudaVideoState_Stopped);
-    assert(CUDA_SUCCESS == oResult);
+    checkCudaErrors(oResult);
 }
 
 bool
@@ -140,6 +144,7 @@ VideoSource::HandleVideoData(void *pUserData, CUVIDSOURCEDATAPACKET *pPacket)
     VideoSourceData *pVideoSourceData = (VideoSourceData *)pUserData;
     // Parser calls back for decode & display within cuvidParseVideoData
     CUresult oResult = cuvidParseVideoData(pVideoSourceData->hVideoParser, pPacket);
+	checkCudaErrors(oResult);
 
     if ((pPacket->flags & CUVID_PKT_ENDOFSTREAM) || (oResult != CUDA_SUCCESS))
         pVideoSourceData->pFrameQueue->endDecode();

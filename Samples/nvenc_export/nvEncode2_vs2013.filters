@@ -37,21 +37,6 @@
     <ClCompile Include="Exporter\cpuid_ssse3.cpp">
       <Filter>Exporter</Filter>
     </ClCompile>
-    <ClCompile Include="..\nvEncode2\src\crepackyuv.cpp">
-      <Filter>NVENC</Filter>
-    </ClCompile>
-    <ClCompile Include="..\nvEncode2\src\CNVEncoderH265.cpp">
-      <Filter>NVENC</Filter>
-    </ClCompile>
-    <ClCompile Include="Exporter\SDK_File_audio.cpp">
-      <Filter>Exporter</Filter>
-    </ClCompile>
-    <ClCompile Include="Exporter\SDK_File_mux.cpp">
-      <Filter>Exporter</Filter>
-    </ClCompile>
-    <ClCompile Include="Exporter\SDK_File_video.cpp">
-      <Filter>Exporter</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Premiere_SDK_Headers\AE_CacheOnLoadSuite.h">
@@ -437,18 +422,6 @@
     </ClInclude>
     <ClInclude Include="..\nvEncode2\nvapi\nvapi.h">
       <Filter>NVAPI</Filter>
-    </ClInclude>
-    <ClInclude Include="..\nvEncode2\inc\CNVEncoderH265.h">
-      <Filter>NVENC</Filter>
-    </ClInclude>
-    <ClInclude Include="Exporter\SDK_File_audio.h">
-      <Filter>Exporter</Filter>
-    </ClInclude>
-    <ClInclude Include="Exporter\SDK_File_mux.h">
-      <Filter>Exporter</Filter>
-    </ClInclude>
-    <ClInclude Include="Exporter\SDK_File_video.h">
-      <Filter>Exporter</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

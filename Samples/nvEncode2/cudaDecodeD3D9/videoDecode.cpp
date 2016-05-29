@@ -19,12 +19,19 @@
 #include <windows.h>
 #include <windowsx.h>
 #endif
-//#include <d3dx9.h>
+#include <d3dx9.h>     // D3D9 interop (IDirect3DDevice9, for initD3D9)
+#include <d3d11.h>     // Direct3D 11 interop (for initD3D11)
+#include <dxgi.h>      // DXGI*
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "D3D11.lib")
 
 #include "VideoDecode.h"
 
 #include <cuda.h>
-//#include <cudad3d9.h>
+#include <cudad3d9.h>  // D3D9 interop (cuD3D9CtxCreate)
+#include <cudaD3D11.h>  // D3D11 interop (cuD3D11CtxCreate)
+
+#include <cuda_d3d11_interop.h> // D3D11 interop
 #include <builtin_types.h>
 
 // CUDA utilities and system includes
@@ -45,6 +52,7 @@
 #include <memory>
 #include <iostream>
 #include <cassert>
+#include <cstdio>
 
 #define VIDEO_SOURCE_FILE "plush1_720p_10s.m2v"
 //#define VIDEO_SOURCE_FILE "D:\\shared\\heat_bd_rip\\bank.m2ts"
@@ -77,7 +85,8 @@ videoDecode::videoDecode(const int argc, char *argv[] ) {
     m_bUpdateCSC  = true;
     m_bUpdateAll  = false;
     m_bUseDisplay = false; // this flag enables/disables video on the window
-    m_bUseInterop = false;
+    m_bUseInterop = false; // if interop is enabled, then the CUDA-device must have an 
+	                       // associated DirectX9 deviceID.  (I.e. it cannot be 'headless')
     m_bReadback   = false; // this flag enables/disables reading back of a video from a window
     m_bIsProgressive = true; // assume it is progressive, unless otherwise noted
     m_bException  = false;
@@ -95,7 +104,12 @@ videoDecode::videoDecode(const int argc, char *argv[] ) {
 
     present_fps = decoded_fps = total_time = 0.0f;
 
-    m_pD3DDevice = NULL;
+	m_pD3D9       = NULL;
+    m_pD3D9Device = NULL;
+
+	m_pD3D11Device = NULL;
+	m_pD3D11DeviceContext = NULL;
+	m_DXGIAdapter = NULL;
 
     cuModNV12toARGB  = 0;
     gfpNV12toARGB    = 0;
@@ -401,6 +415,10 @@ if ( pcudevice == NULL ) {
     else
     {
         // If we want to use Graphics Interop, then choose the GPU that is capable
+		//
+		// Note, if more than 1 NVidia-GPU is installed, this code might select
+		// the 'wrong' GPU.  The initD3D9() routine always picks the NVidia GPU 
+		// with the lowest# Direct3D9 device index#.
         if (m_bUseInterop)
         {
             cuda_device = gpuGetMaxGflopsGLDeviceIdDRV();
@@ -411,9 +429,16 @@ if ( pcudevice == NULL ) {
             cuda_device = gpuGetMaxGflopsDeviceIdDRV();
             checkCudaErrors(cuDeviceGet(&m_oDevice, cuda_device));
         }
+
+		if ( pcudevice )
+			*pcudevice = m_oDevice;
     }
 } // if ( pcudevice == NULL )
 else {
+	// The caller supplied a CudaDeviceID; use it instead of selecting one ourselves.
+	//  ** does not support interop (Direct3D9) mode **
+	assert ( pcudevice != NULL );
+	assert ( m_bUseInterop == false );
     m_oDevice = *pcudevice;// use caller-supplied CudaDeviceID
 }
 
@@ -423,19 +448,40 @@ else {
     char deviceName[256];
     checkCudaErrors(cuDeviceComputeCapability(&major, &minor, m_oDevice));
     checkCudaErrors(cuDeviceGetName(deviceName, 256, m_oDevice));
-    printf("> Using GPU Device %d: %s has SM %d.%d compute capability\n", cuda_device, deviceName, major, minor);
+    my_printf("> Using GPU Device %d: %s has SM %d.%d compute capability\n", cuda_device, deviceName, major, minor);
 
     checkCudaErrors(cuDeviceTotalMem(&totalGlobalMem, m_oDevice));
-    printf("  Total amount of global memory:     %4.4f MB\n", (float)totalGlobalMem/(1024*1024));
+    my_printf("  Total amount of global memory:     %4.4f MB\n", (float)totalGlobalMem/(1024*1024));
 
     // Create CUDA Device w/ D3D9 interop (if WDDM), otherwise CUDA w/o interop (if TCC)
     // (use CU_CTX_BLOCKING_SYNC for better CPU synchronization)
     if (m_bUseInterop)
     {
-        //checkCudaErrors(cuD3D9CtxCreate(&m_oContext, &m_oDevice, CU_CTX_BLOCKING_SYNC, m_pD3DDevice));
+		// In interop mode, the video-decoder will create a CudaContext with 
+		// the caller designated Direct3D9 dobject (m_pD3DDevice.)
+		// (The caller also needs to supply the cuda-device: m_oDevice)
+	    my_printf("  m_bUseInterop mode = true, attempting to create D3D9Device for CUDA-device\n");
+
+        assert ( pcucontext == NULL);
+        assert ( m_pD3D9Device != NULL);// interOp mode requires this object to create the cuContext
+//        assert ( m_pD3D11Device != NULL);// interOp mode requires this object to create the cuContext
+
+		// Interop mode is only needed for codecs with a hybrid-implementation.
+		// For example: HEVC decoding on Kepler and 1st generation Maxwell devices
+		checkCudaErrors(
+			cuD3D9CtxCreateOnDevice(&m_oContext, CU_CTX_BLOCKING_SYNC, m_pD3D9Device, m_oDevice )
+		);
+
+		// Unfortunately, the DXVA stuff doesn't work with cuD3D11 context, it only seems
+		// to work with a cuD3D9 context.  This means the NVidia GPU must be attached to a
+		// display (i.e. it cannot be running in 'headless' mode.)
+//		checkCudaErrors(cuD3D11CtxCreateOnDevice(
+//			&m_oContext, CU_CTX_BLOCKING_SYNC, m_pD3D11Device, m_oDevice));
     }
     else
     {
+		// Not using interop-mode:
+		//   Create our own cudaContext (if the caller pass us an existing one)
         if ( pcucontext ) {
             m_oContext = *pcucontext; // use caller supplied context
             checkCudaErrors(cuCtxPushCurrent(m_oContext));
@@ -479,8 +525,10 @@ else {
     }
     else
     {
-        checkCudaErrors(cuMemAlloc(&m_pInteropFrame[0], m_pVideoDecoder->targetWidth() * m_pVideoDecoder->targetHeight() * 2));
-        checkCudaErrors(cuMemAlloc(&m_pInteropFrame[1], m_pVideoDecoder->targetWidth() * m_pVideoDecoder->targetHeight() * 2));
+		// we don't need to allocate InteropFrame(s) because we aren't
+		// going to copy the decoded frames to DirectX surface/texture mem
+//        checkCudaErrors(cuMemAlloc(&m_pInteropFrame[0], m_pVideoDecoder->targetWidth() * m_pVideoDecoder->targetHeight() * 2));
+//        checkCudaErrors(cuMemAlloc(&m_pInteropFrame[1], m_pVideoDecoder->targetWidth() * m_pVideoDecoder->targetHeight() * 2));
     }
 
     CUcontext cuCurrent = NULL;
@@ -494,7 +542,7 @@ else {
 
     /////////////////////////////////////////
     //return ((m_pCudaModule && m_pVideoDecoder && (m_pImageDX || m_pInteropFrame[0])) ? S_OK : E_FAIL);
-    return ((m_pVideoDecoder && (m_pImageDX || m_pInteropFrame[0])) ? S_OK : E_FAIL);
+	return m_pVideoDecoder  ? S_OK : E_FAIL;
 }
 
 HRESULT videoDecode::reinitCudaResources()
@@ -518,6 +566,11 @@ HRESULT videoDecode::reinitCudaResources()
     /////////////////////////////////////////
 
     return S_OK;
+}
+
+CUcontext videoDecode::GetCudaContext() const
+{
+	return m_oContext;
 }
 
 void videoDecode::displayHelp()
@@ -563,9 +616,8 @@ void videoDecode::parseCommandLineArguments()
 
     if (checkCmdLineFlag(m_argc, (const char **)m_argv, "decodedxva"))
     {
-        printf("[%s]: option not supported!", "decodedxva");
-        exit(EXIT_FAILURE);
         m_eVideoCreateFlags = cudaVideoCreate_PreferDXVA;
+        m_bUseInterop    = true; // DXVA requires interop mode
     }
 
     if (checkCmdLineFlag(m_argc, (const char **)m_argv, "decodecuvid"))
@@ -706,11 +758,39 @@ videoDecode::loadVideoSource( CUVIDEOFORMAT *fmt )
     m_pFrameQueue  = apFrameQueue.release();
     m_pVideoSource = apVideoSource.release();
 
+	// cudaVideoCreate_PreferCUVID is the Default, but some codecs 
+	// must be handled as special-cases.
     if (m_pVideoSource->format().codec == cudaVideoCodec_JPEG ||
         m_pVideoSource->format().codec == cudaVideoCodec_MPEG2)
     {
         m_eVideoCreateFlags = cudaVideoCreate_PreferCUDA;
     }
+    else {
+		// For everything else, use DirectX-VA.  The reason we use
+		// DXVA instead of the native CUVID mode, is due to compatibility
+		// issues CUVID has with some bitstreams.  
+		// On Maxwell Gen1 (GM107), HEVC bitstreams require DXVA mode,
+		// and some 4k H264 videos (those with more than 4 ref frames)
+		//
+		// Since DXVA should have the highest compatibility, default to DXVA.
+		// (The function that actually creates the cuviddecoder object will
+		//  automatically fallback to CUVID mode if DXVA fails.)
+
+		// HEVC: Kepler and Maxwell devices (up through Compute Level 5.2)
+		//       have a 'hybrid' decoder (video-engine + GPGPU cuda-cores)
+		//       And thus require decoding through DXVA
+		//
+		// H264_MVC (stereoscopic): NVCUVID flag doesn't work
+		//
+		// H264 (excess #refframes?): NVUCVID flag doesn't work
+
+        m_eVideoCreateFlags = cudaVideoCreate_PreferDXVA;
+    }
+
+	// If interop mode is available, then use DXVA because it's compatible
+	// with more videostreams.
+	if ( m_bUseInterop )
+        m_eVideoCreateFlags = cudaVideoCreate_PreferDXVA;
 
     bool IsProgressive = 0;
     m_pVideoSource->getProgressive(IsProgressive);
@@ -805,9 +885,11 @@ videoDecode::freeCudaResources(bool bDestroyContext)
 bool videoDecode::copyDecodedFrameToTexture(unsigned int &nRepeats, 
     CUVIDPICPARAMS *pDecodedPicInfo,   // decoded frame metainfo (I/B/P frame, etc.)
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
-    CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields)
+    CUdeviceptr pDecodedFrame[],       // handle - decoded framebuffer (or fields)
+	unsigned int *nDecodedPitch        // #bytes per scanline
 )
 {
+    *nDecodedPitch = 0;
 
     if (m_pFrameQueue->dequeue(pDisplayInfo,pDecodedPicInfo))
     {
@@ -833,12 +915,11 @@ bool videoDecode::copyDecodedFrameToTexture(unsigned int &nRepeats,
             oVideoProcessingParameters.top_field_first   = pDisplayInfo->top_field_first;
             oVideoProcessingParameters.unpaired_field    = (num_fields == 1);
 
-            unsigned int nDecodedPitch = 0;
             unsigned int nWidth = 0;
             unsigned int nHeight = 0;
 
-            // map decoded video frame to CUDA surfae
-            m_pVideoDecoder->mapFrame(pDisplayInfo->picture_index, &pDecodedFrame[active_field], &nDecodedPitch, &oVideoProcessingParameters);
+            // map decoded video frame to CUDA surface
+            m_pVideoDecoder->mapFrame(pDisplayInfo->picture_index, &pDecodedFrame[active_field], nDecodedPitch, &oVideoProcessingParameters);
             nWidth  = m_pVideoDecoder->targetWidth();
             nHeight = m_pVideoDecoder->targetHeight();
             // map DirectX texture to CUDA surface
@@ -925,13 +1006,13 @@ bool videoDecode::copyDecodedFrameToTexture(unsigned int &nRepeats,
 
             // unmap video frame
             // unmapFrame() synchronizes with the VideoDecode API (ensures the frame has finished decoding)
-            // note, the actions below must now be done by the aller
+            // note, the actions below must now be done by the caller
 
             //m_pVideoDecoder->unmapFrame(pDecodedFrame[active_field]);
             // release the frame, so it can be re-used in decoder
             //m_pFrameQueue->releaseFrame(pDisplayInfo);
             m_DecodeFrameCount++;
-        }
+        } // for (int active_field=0; active_field<num_fields; active_field++)
 
         // Detach from the Current thread
         checkCudaErrors(cuCtxPopCurrent(NULL));
@@ -951,7 +1032,8 @@ bool videoDecode::copyDecodedFrameToTexture(unsigned int &nRepeats,
 bool videoDecode::renderVideoFrame(HWND hWnd,
     CUVIDPICPARAMS *pDecodedPicInfo,   // decoded frame metainfo (I/B/P frame, etc.)
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
-    CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields))
+    CUdeviceptr pDecodedFrame[],       // handle - decoded framebuffer (or fields))
+	unsigned int* pDecodedFrame_pitch  // #bytes per scanline
 ) {
     static unsigned int nRepeatFrame = 0;
     int repeatFactor = m_iRepeatFactor;
@@ -965,7 +1047,9 @@ bool videoDecode::renderVideoFrame(HWND hWnd,
         // new frames from the decoder
         if (!m_bDeviceLost && m_bRunning)
         {
-            bFramesDecoded = copyDecodedFrameToTexture(nRepeatFrame, pDecodedPicInfo, pDisplayInfo, pDecodedFrame);
+            bFramesDecoded = copyDecodedFrameToTexture(
+				nRepeatFrame, pDecodedPicInfo, pDisplayInfo, pDecodedFrame, pDecodedFrame_pitch
+			);
         }
     }
     else
@@ -1059,12 +1143,30 @@ HRESULT videoDecode::cleanup(bool bDestroyContext)
     freeCudaResources(bDestroyContext);
 
     // destroy the D3D device
-    //if (m_pD3DDevice)
-    //{
-    //    m_pD3DDevice->Release();
-    //    m_pD3DDevice = NULL;
-    //}
+    if (m_pD3D9Device)
+    {
+        m_pD3D9Device->Release();
+        m_pD3D9Device = NULL;
+    }
 
+	if ( m_pD3D9 ) {
+	    m_pD3D9->Release();
+        m_pD3D9 = NULL;
+	}
+
+	if ( m_pD3D11Device ) {
+		m_pD3D11Device->Release();
+		m_pD3D11Device = NULL;
+	}
+	if ( m_pD3D11DeviceContext ) {
+		m_pD3D11DeviceContext->Release();
+		m_pD3D11DeviceContext = NULL;
+	}
+
+	if ( m_DXGIAdapter ) {
+		m_DXGIAdapter->Release();
+		m_DXGIAdapter = NULL;
+	}
 
     return S_OK;
 }
@@ -1074,7 +1176,8 @@ bool videoDecode::GetFrame(
     bool *got_frame,
     CUVIDPICPARAMS *pDecodedPicInfo,   // decoded frame metainfo (I/B/P frame, etc.)
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
-    CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields)
+    CUdeviceptr pDecodedFrame[],       // handle - decoded framebuffer (or fields)
+	unsigned int* pDecodedFrame_pitch  // #bytes per scanline
 )
 {
     bool new_frame = false;
@@ -1085,10 +1188,9 @@ bool videoDecode::GetFrame(
     if (isStarted && !isEnd)
     {
             //renderVideoFrame(hWnd, false);
-            *got_frame = renderVideoFrame(NULL, pDecodedPicInfo, pDisplayInfo, pDecodedFrame);
+            *got_frame = renderVideoFrame(NULL, pDecodedPicInfo, pDisplayInfo, pDecodedFrame, pDecodedFrame_pitch);
             new_frame = true;
     }
-
 
     return new_frame;
 }
@@ -1114,8 +1216,8 @@ videoDecode::GetFrameFinish(
         // Let's free the Frame Data
         if (m_ReadbackSID && m_bFrameData)
         {
-            cuMemFreeHost((void *)m_bFrameData[0]);
-            cuMemFreeHost((void *)m_bFrameData[1]);
+            checkCudaErrors(cuMemFreeHost((void *)m_bFrameData[0]));
+            checkCudaErrors(cuMemFreeHost((void *)m_bFrameData[1]));
             m_bFrameData[0] = NULL;
             m_bFrameData[1] = NULL;
         }
@@ -1139,3 +1241,324 @@ videoDecode::GetFrameFinish(
     }
     return true;
 }
+
+// Initialize Direct3D9 device
+// ---------------------------
+//   in interop mode (m_bInterOp==true), the CUDA-context object will be created
+//   with a Direct3DDevice9 device (which corresponds to the NVidia-GPU.)
+//   The d3d9 object must be enumerated & initialized before creating the
+//   cuda-context.
+bool 
+videoDecode::initD3D9(HWND hWnd, const int unsigned width, const int unsigned height, int *pbTCC)
+{
+    int device_count = 0;
+	CUdevice cudev;
+    bool bSpecifyDevice=true;
+    char device_name[256];
+
+    // Check for a min spec of Compute 1.1 capability before running
+    checkCudaErrors(cuDeviceGetCount(&device_count));
+
+    if ((m_DeviceID > (device_count-1)) || (m_DeviceID < 0))
+    {
+        printf(" >>> Invalid GPU Device ID=%d specified, only %d GPU device(s) are available.<<<\n", m_DeviceID, device_count);
+        printf(" >>> Valid GPU ID (n) range is between [%d,%d]...  Exiting... <<<\n", 0, device_count-1);
+        return false;
+    }
+
+    // We are specifying a GPU device, check to see if it is TCC or not
+	checkCudaErrors(cuDeviceGet(&cudev, m_DeviceID));
+	checkCudaErrors(cuDeviceGetName(device_name, 256, cudev));
+
+	checkCudaErrors(cuDeviceGetAttribute(pbTCC, CU_DEVICE_ATTRIBUTE_TCC_DRIVER, cudev));
+	my_printf("initD3D9: user selected '-device=%0d' -> CUdevice#%d: < %s > driver mode is: %s\n",
+		m_DeviceID, cudev, device_name, *pbTCC ? "TCC" : "WDDM");
+
+    // Only if we are not using a TCC device will we use this path, otherwise we support using the VP w/o TCC
+    HRESULT eResult = S_OK;
+
+    if ( *pbTCC )
+    {
+		// Without visualization, no need to create a D3D device.
+        fprintf(stderr, "> %s is decoding w/o visualization\n", sSDKname);
+        return false;
+    }
+
+    // Create the D3D object.
+    if (NULL == (m_pD3D9 = Direct3DCreate9(D3D_SDK_VERSION)))
+    {
+		// If Direct3D9 API isn't available, automatically fail.
+        return false;
+    }
+
+    // Get primary display identifier
+    D3DADAPTER_IDENTIFIER9 adapterId;
+    bool bDeviceFound = false;
+    int device;
+
+////////////////////////////////////////////////////////////
+/*
+    //
+	// Direct3D11 version of the enumerate-device, and create-device procedure
+	//
+    IDXGIAdapter1 * pAdapter; 
+    std::vector <IDXGIAdapter1*> vAdapters; 
+    IDXGIFactory1* pFactory1 = NULL; 
+    DXGI_ADAPTER_DESC adapter_Desc;
+
+    // Create a DXGIFactory object.
+    if(FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1) ,(void**)&pFactory1)))
+    {
+		my_printf("> CreateDXGIFactory1() failed!\n" );
+		return false;
+    }
+
+    for ( UINT i = 0;
+          pFactory1->EnumAdapters1(i, &pAdapter) != DXGI_ERROR_NOT_FOUND;
+          ++i )
+    {
+		pAdapter->GetDesc( &adapter_Desc);
+		wprintf( L"IDXGIFactory::EnumAdapters(%0u) -> %s\n",
+			i, adapter_Desc.Description
+		);
+
+        vAdapters.push_back(pAdapter); 
+    } 
+
+	my_printf("videoDecode::initD3D9(): found %0u DXGI adapter(s)\n", vAdapters.size() );
+
+    // Find the first CUDA capable device
+    CUresult cuStatus;
+	CUdevice cuDevice;
+    for ( UINT i = 0; i < vAdapters.size(); ++i )
+    {
+		pAdapter = vAdapters[i];
+		pAdapter->GetDesc( &adapter_Desc);
+		if ( adapter_Desc.Description )
+        cuStatus = cuD3D11GetDevice(&cuDevice, pAdapter);
+		wprintf(L"> DXGI Display Device #%0u of %0u: \"%s\" %s Direct3D11\n",
+                  i, vAdapters.size(), adapter_Desc.Description,
+                  (cuStatus == cudaSuccess) ? L"supports" : L"does not support");
+
+		if (cudaSuccess == cuStatus && (m_oDevice == cuDevice) ) {
+			printf("   --> using this adapter[%0u]\n", i );
+			m_DXGIAdapter = pAdapter;
+			bDeviceFound = true;
+			//m_oDevice = device;
+			break; // exit the for-loop
+		}
+		else
+		{
+			pAdapter->Release();
+		}
+	} // for ( i )
+
+    if(pFactory1)
+        pFactory1->Release();
+
+	// we check to make sure we have found a cuda-compatible D3D device to work on
+	if (!bDeviceFound)
+	{
+		printf("\n");
+		printf("  No CUDA-compatible DXGI (Direct3D11) device available\n");
+		return false;
+	}
+
+	const D3D_FEATURE_LEVEL requested_feature_level = D3D_FEATURE_LEVEL_11_0;
+	D3D_FEATURE_LEVEL accepted_feature_level;
+	eResult = D3D11CreateDevice(
+		m_DXGIAdapter,
+		D3D_DRIVER_TYPE::D3D_DRIVER_TYPE_UNKNOWN, // can't use D3D_DRIVER_TYPE_HARDWARE with non-null m_DXGIAdapter
+		NULL, // _In_   HMODULE Software,
+		0, //D3D11_CREATE_DEVICE_VIDEO_SUPPORT, // _In_   UINT Flags,
+		&requested_feature_level, // &requested_feature_level, // _In_   const D3D_FEATURE_LEVEL *pFeatureLevels,
+		1, // _In_   UINT FeatureLevels,
+		D3D11_SDK_VERSION, //_In_   UINT SDKVersion,
+		&m_pD3D11Device, // _Out_  ID3D11Device **ppDevice,
+		&accepted_feature_level, // _Out_  D3D_FEATURE_LEVEL *pFeatureLevel,
+		&m_pD3D11DeviceContext //  _Out_  ID3D11DeviceContext **ppImmediateContext
+	);
+	if ( eResult != S_OK )
+		my_printf("D3D11CreateDevice() failed with %0u (0x%0X)\n", eResult, eResult );
+
+*/
+	// Attempt to create a IDirect3DDevivce9 object corresponding to the user-selected
+	// CUdevice index#.  For some video codecs (such as HEVC), NVCUVID may need to
+	// use DirectXVA (DXVA), which is only available if we create a cuda-context with
+	// a Direct3D9 interoperability object.
+	//
+	// [We cannot substitute a D3D11 interop-object for the D3D9 one; the context is
+	// successfully created, but cuvidCreateDecoder() fails.]
+	
+	// (1) the selected CUDA-device (GPU) isn't connected to any device (i.e. 'headless')
+
+	// scan all direct3d9 objects for their corresponding CUDA-devices
+	CUdevice cuda_devices[256];     // up to 256-GPUs in SLI-mode? (probably not...)
+	unsigned int cuda_device_count; // #devices returned by cuD3D9GetDevices
+
+    for (unsigned int g_iAdapter = 0; g_iAdapter < m_pD3D9->GetAdapterCount(); g_iAdapter++)
+    {
+        HRESULT hr = m_pD3D9->GetAdapterIdentifier(g_iAdapter, 0, &adapterId);
+
+        if (FAILED(hr))
+        {
+			my_printf("m_pD3D9->GetAdapterIdentifier() failed on adapternum#%0u, skipping this one\n", g_iAdapter );
+            continue;
+        }
+
+		if ( !CreateD3D9device(hWnd, g_iAdapter, width, height) ) {
+			my_printf("CreateD3D9Device() failed on adapternum#%0u, skipping this one\n", g_iAdapter );
+			continue;
+		}
+
+		CUresult cuStatus = cuD3D9GetDevices(
+			&cuda_device_count, cuda_devices, sizeof(cuda_devices)/sizeof(cuda_devices[0]),
+			m_pD3D9Device, CU_D3D9_DEVICE_LIST_ALL
+		);
+
+		if ( cuStatus == CUDA_SUCCESS )
+            //cuStatus = cuD3D9GetDevice(&device, adapterId.DeviceName);
+			for(unsigned int i = 0; i < cuda_device_count; ++i ) {
+				// get compute capabilities and the devicename
+				size_t totalGlobalMem;
+				char deviceName[256];
+				checkCudaErrors(cuDeviceGetName(deviceName, sizeof(deviceName)/sizeof(deviceName[0]), cuda_devices[i]));
+				checkCudaErrors(cuDeviceTotalMem(&totalGlobalMem, cuda_devices[i]));
+				printf("   checking IDirect3DDevice9 #%0u: attached CUdevice#%0d: %s (%0lu MB) ...\n",
+					g_iAdapter, cuda_devices[i], deviceName, totalGlobalMem >> 20 // convert byte to MByte
+				);
+
+				//if ( m_oDevice == cuda_devices[i] ) {
+				if ( cudev == cuda_devices[i]) {
+					printf( "    ... Using this CUDA-adapter (CUdevice#%0d)\n", cudev );
+					bDeviceFound = true;
+					eResult = S_OK;
+					break; // break out of inner for-loop (i)
+				}
+			} // for i
+			
+		if ( bDeviceFound ) // if we found the CUDA-device, then quit
+			break;
+
+		printf("    ... this D3D9 adapter did not match our search criteria\n");
+		m_pD3D9Device->Release();
+    } // for g_iAdapter
+
+    if (!bDeviceFound) {
+        printf("\n");
+        printf("  No CUDA-compatible Direct3D9 device available\n");
+        // destroy the D3D device
+        m_pD3D9->Release();
+        m_pD3D9 = NULL;
+        return false;
+    }
+
+	/*
+        // we check to make sure we have found a cuda-compatible D3D device to work on
+        if (!bDeviceFound)
+        {
+            printf("\n");
+            printf("  No CUDA-compatible Direct3D9 device available\n");
+            // destroy the D3D device
+            m_pD3D9->Release();
+            m_pD3D9 = NULL;
+            return false;
+        }
+        // Create the D3D Display Device
+        RECT                  rc;
+        GetClientRect(hWnd, &rc);
+        m_pD3D9->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &g_d3ddm);
+        memset( (void *)&m_d3dpp, 0, sizeof(m_d3dpp));
+
+        m_d3dpp.Windowed               = TRUE; // fullscreen or windowed?
+
+        m_d3dpp.BackBufferCount        = 0;
+        m_d3dpp.SwapEffect             = D3DSWAPEFFECT_DISCARD;
+        m_d3dpp.hDeviceWindow          = hWnd;
+        m_d3dpp.BackBufferWidth        = width;//rc.right  - rc.left;
+        m_d3dpp.BackBufferHeight       = height;//rc.bottom - rc.top;
+        m_d3dpp.BackBufferFormat       = D3DFMT_A8R8G8B8;// g_d3ddm.Format;
+        m_d3dpp.FullScreen_RefreshRateInHz = 0; // set to 60 for fullscreen, and also don't forget to set Windowed to FALSE
+        m_d3dpp.PresentationInterval   = D3DPRESENT_INTERVAL_IMMEDIATE;
+        m_d3dpp.Flags              = D3DPRESENTFLAG_VIDEO;    // turn off vsync
+
+        eResult = m_pD3D9->CreateDevice(g_iAdapter, D3DDEVTYPE_HAL, hWnd,
+                                       D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED,
+                                       &m_d3dpp, &m_pD3DDevice);
+		printf("IDirect3D9::CreateDevice(): ");
+
+		switch( eResult ) {
+		case D3DERR_DEVICELOST : printf("D3DERR_DEVICELOST");
+				break;
+			case D3DERR_INVALIDCALL: printf("D3DERR_INVALIDCALL");
+				break;
+			case D3DERR_NOTAVAILABLE: printf("D3DERR_NOTAVAILABLE");
+				break;
+			case D3DERR_OUTOFVIDEOMEMORY: printf("D3DERR_OUTOFVIDEOMEMORY");
+				break;
+			default: printf("SUCCESS");
+				;
+		}
+		printf ("\n");
+	*/
+    return (eResult == S_OK);
+}
+
+bool 
+videoDecode::CreateD3D9device(
+	HWND hWnd, 
+	const int unsigned adapternum,    // index of the adapter (for IDirect3D9::CreateDevice)
+	const int unsigned width,         // hWnd's X-dimension (#pixels)
+	const int unsigned height)        // hWnd's Y-dimension (#pixels)
+{
+    D3DADAPTER_IDENTIFIER9 adapterId;
+	D3DDISPLAYMODE        g_d3ddm;
+	D3DPRESENT_PARAMETERS m_d3dpp;
+
+    RECT                  rc;
+    HRESULT               eResult = S_OK;
+
+	eResult = m_pD3D9->GetAdapterIdentifier(adapternum, 0, &adapterId);
+
+	// Create a client-window.  Our app won't be using it, so it's just
+	// a dummy.
+    GetClientRect(hWnd, &rc);
+    m_pD3D9->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &g_d3ddm);
+    memset( (void *)&m_d3dpp, 0, sizeof(m_d3dpp));
+
+    m_d3dpp.Windowed               = TRUE; // fullscreen or windowed?
+    m_d3dpp.BackBufferCount        = 0;
+    m_d3dpp.SwapEffect             = D3DSWAPEFFECT_DISCARD;
+    m_d3dpp.hDeviceWindow          = hWnd;
+    m_d3dpp.BackBufferWidth        = width;//rc.right  - rc.left;
+    m_d3dpp.BackBufferHeight       = height;//rc.bottom - rc.top;
+    m_d3dpp.BackBufferFormat       = D3DFMT_A8R8G8B8;// g_d3ddm.Format;
+    m_d3dpp.FullScreen_RefreshRateInHz = 0; // set to 60 for fullscreen, and also don't forget to set Windowed to FALSE
+    m_d3dpp.PresentationInterval   = D3DPRESENT_INTERVAL_IMMEDIATE;
+    m_d3dpp.Flags              = D3DPRESENTFLAG_VIDEO;    // turn off vsync
+
+    // Create the D3D Display Device
+    eResult = m_pD3D9->CreateDevice(
+		adapternum, D3DDEVTYPE_HAL, hWnd,
+        D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED,
+        &m_d3dpp, &m_pD3D9Device
+	);
+	printf("IDirect3D9::CreateDevice(): adapternum#%0u, %s (%s)\n", adapternum, adapterId.DeviceName, adapterId.Description);
+	printf("    ...CreateDevice() returned ");
+	switch( eResult ) {
+		case D3DERR_DEVICELOST : printf("D3DERR_DEVICELOST");
+			break;
+		case D3DERR_INVALIDCALL: printf("D3DERR_INVALIDCALL");
+			break;
+		case D3DERR_NOTAVAILABLE: printf("D3DERR_NOTAVAILABLE");
+			break;
+		case D3DERR_OUTOFVIDEOMEMORY: printf("D3DERR_OUTOFVIDEOMEMORY");
+			break;
+		default:
+			printf("SUCCESS");
+	} // switch
+	printf ("\n");
+
+    return (eResult == S_OK);
+}
+

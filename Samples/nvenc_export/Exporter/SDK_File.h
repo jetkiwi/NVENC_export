@@ -61,19 +61,24 @@
 #include	<cuda.h>
 #include "CNvEncoder.h"
 
+#include <MMReg.h> // for GUID KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE
+
 #ifndef SDK_FILE_CURRENT_VERSION	
-#define SDK_FILE_CURRENT_VERSION	35			// The current file version number. When making a change
+#define SDK_FILE_CURRENT_VERSION	37			// The current file version number. When making a change
 												// to the file structure, increment this value.
 #endif
+
 #define SDK_FILETYPE				'SDK_'		// The four character code for our filetype
 #define SDK_FILE_EXTENSION_M4A		L"m4a"		// file extension for MPEG-4 Audio (AAC) output [in an MP4 wrapper]
 #define SDK_FILE_EXTENSION_M4V		L"m4v"		// file extension for H264 (video) output
+#define SDK_FILE_EXTENSION_HEVC		L"hevc"		// file extension for H265 (video) output
 #define SDK_FILE_EXTENSION_WAV		L"wav"		// file extension for pcm (audio) output
 #define SDK_FILE_EXTENSION_M2T		L"ts"		// file extension for muxed (A+V) output
 												//  ^^^ Caution: must be 'ts' or 'm2ts', becauase TSMUXER.EXE
 												//               will analyze this filename-extension to
 												//               choose the proper mux--output type.
 #define SDK_FILE_EXTENSION_MP4		L"mp4"		// file extension for muxed (A+V) output
+#define SDK_FILE_EXTENSION_MKV		L"mkv"		// file extension for muxed (A+V) output
 
 // exSDKStartup(): the following defines enumerate the different codecs in this exporter
 //                 (Note, we only support SDK_FILE_TYPE_M4V)
@@ -87,7 +92,7 @@
 #define SDK_10_BIT_YUV_NAME			L"Uncompressed 10-bit YUV (v410)"
 #define	SDK_RLE_NAME				L"RLE Compressed 8-bit RGB"
 
-#define	SDK_NAME					"NVidia NVENC SDK 4.0 (Aug 2014) Exporter"	// This string is used in the file header
+#define	SDK_NAME					"NVidia NVENC SDK 5.0 (Dec 2014) Exporter"	// This string is used in the file header
 #define	SDK_CLSS					'DTEK'		// ClassID four character code, used in the Editing Mode XML
 
 // Codec (subtype) fourCCs
@@ -265,6 +270,12 @@ typedef struct CodecSettings
 	prBool		sampleSetting;	// Sample setting to demonstrate how to set and get custom settings
 } CodecSettings;
 
+typedef union {
+	uint32_t  dword[1];
+	uint16_t  word[2];
+	uint8_t   byte[4];
+} dword_word_byte_u; // a 32-bit glob that is addressable as byte/word/dword
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Video import-related calls
@@ -312,62 +323,7 @@ void WriteRLE	(long			*src,
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Audio import-related calls
-void calculateAudioRequest(
-	imImportAudioRec7	*audioRec7,
-	const PrAudioSample	totalSampleFrames,
-	PrAudioSample		*savedAudioPosition,
-	PrAudioSample		*startAudioPosition,
-	PrAudioSample		*numAudioFrames);
-
-void setPointerToAudioStart(
-	ImporterLocalRec8H		ldataH,
-	const PrAudioSample		startAudioPosition,
-	imFileRef				SDKfileRef);
-
-prMALError readAudioToBuffer (	const PrAudioSample	numAudioFrames,
-								const PrAudioSample	totalSampleFrames,
-								const csSDK_int32	numAudioChannels,
-								imFileRef			SDKfileRef,
-								float **			audioBuffer);
-
-
-///////////////////////////////////////////////////////////////////////////////
 // Export-related calls
-prMALError WriteSDK_WAVHeader(	exportStdParms	*stdParms,
-								exDoExportRec	*exportInfoP, 
-								PrTime			exportDuration);
-
-prMALError RenderAndWriteVideoFrame(
-	const bool					isFrame0,  // Is this the 1st frame of the render?
-	const bool					dont_encode, // if true, don't submit frame to CNvEncoderH264
-	const PrTime				videoTime,
-	exDoExportRec				*exportInfoP);
-
-// standard (non-pipe) mode
-bool NVENC_run_neroaacenc(
-	const csSDK_uint32 exID,
-	const ExportSettings *mySettings,
-	const wchar_t in_wavfilename[],
-	const wchar_t out_aacfilename[]
-);
-
-// for "PIPE-mode": not currently used
-// NVENC_spawn_neroaacenc() - create's a background process that
-//     executes NeroAacEnc.exe with <stdin> input (from pipe)
-bool NVENC_spawn_neroaacenc(
-	const csSDK_uint32 exID,
-	ExportSettings *mySettings,
-	const wchar_t out_aacfilename[]  // output *.AAC filename
-);
-
-// for "PIPE-mode": not currently used
-// NVENC_wait_neroaacenc() wait for completion of the process
-// spawned by NVENC_spawn_neroaacenc()
-bool NVENC_wait_neroaacenc(
-	ExportSettings *mySettings,
-	const wchar_t out_aacfilename[]
-);
 
 void RemoveRowPadding(	char		*srcFrameZ,
 						char		*dstFrameZ, 
@@ -376,10 +332,6 @@ void RemoveRowPadding(	char		*srcFrameZ,
 						csSDK_int32 widthL, 
 						csSDK_int32 heightL);
 
-prMALError RenderAndWriteAllAudio(
-	exDoExportRec				*exportInfoP,
-	PrTime						exportDuration);
-
 void WriteMarkerAndProjectDataToFile(
 	exportStdParms		*stdParms, 
 	exDoExportRec		*exportInfoP);
@@ -387,7 +339,6 @@ void WriteMarkerAndProjectDataToFile(
 
 ///////////////////////////////////////////////////////////////////////////////
 // Miscellaneous helper funcs
-csSDK_int32 GetNumberOfAudioChannels(csSDK_int32 audioChannelType);
 
 csSDK_int32 GetPixelFormatSize(PrFourCC subtype);
 csSDK_int32 GetPixelFormatSize(PrPixelFormat pixelFormat);
@@ -414,6 +365,8 @@ void copyConvertStringLiteralIntoUTF16(const wchar_t* inputString, prUTF16Char* 
 void safeStrCpy (char *destStr, int size, const char *srcStr);
 void safeWcscat (wchar_t *destStr, int size, const wchar_t *srcStr);
 
+bool Check_prSuiteError(const prSuiteError errval, string &str);
+
 //	This format does not support audio interleaving or "smart" RLE encoding.
 
 //	Frames end with \n\n\n\n, audio "blips" start with ++++
@@ -431,5 +384,30 @@ typedef struct Node{
 	csSDK_int32	count;
 	csSDK_int32	pixel;
 } Node;
+
+
+//
+// nvenc_make_output_filename(): transforms 'src' filename into the output filename 'dst' by
+//  (1) stripping off the src filename's extension
+//
+// Example:
+//		src = "hello.mpeg"
+//		postfix = "_temp_1414"
+//		ext = "ts"
+//
+//		Result:  dst = "hello_temp_1414.ts"
+void
+nvenc_make_output_filename(
+	const wstring &src,
+	const wstring &postfix,
+	const wstring &ext,
+	wstring &dst
+);
+
+void
+nvenc_make_output_dirname(
+	const wstring &src,
+	wstring &dst
+);
 
 #endif

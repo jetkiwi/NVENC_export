@@ -28,6 +28,10 @@
 #include <memory>
 #include <cassert>
 
+#include <D3D9.h>
+#include <D3D11.h>
+#include <DXGI.h>
+
 // my_printf(): annotate all printed msgs with 'file(line#)'
 #define my_printf(...) printf("%s(%0u):", __FILE__, __LINE__), printf(__VA_ARGS__)
 
@@ -90,9 +94,15 @@ float present_fps, decoded_fps, total_time ;
 //D3DDISPLAYMODE        m_d3ddm;
 //D3DPRESENT_PARAMETERS m_d3dpp;
 
-//IDirect3D9        *m_pD3D; // Used to create the D3DDevice
-//IDirect3DDevice9 *m_pD3DDevice;
-void *m_pD3DDevice ;
+// Direct3D9 interop
+IDirect3D9        *m_pD3D9; // Used to create the D3D9Device
+IDirect3DDevice9  *m_pD3D9Device;
+
+// Direct3D11 interop
+ID3D11Device      *m_pD3D11Device;
+ID3D11DeviceContext *m_pD3D11DeviceContext;
+
+IDXGIAdapter1     *m_DXGIAdapter;// Direct3D11
 
 // These are CUDA function pointers to the CUDA kernels
 CUmoduleManager   *m_pCudaModule;
@@ -166,6 +176,7 @@ void computeFPS(HWND hWnd);
 HRESULT initCudaResources(int bUseInterop, int bTCC, 
     CUdevice *pcudevice = NULL, CUcontext *pcucontext = NULL);
 HRESULT reinitCudaResources();
+CUcontext GetCudaContext() const;
 void displayHelp();
 void parseCommandLineArguments();
 bool loadVideoSource( CUVIDEOFORMAT *fmt );
@@ -176,24 +187,32 @@ bool copyDecodedFrameToTexture(
     unsigned int &nRepeats,
     CUVIDPICPARAMS *pDecodedPicInfo,   // decoded frame metainfo (I/B/P frame, etc.)
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
-    CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields)
+    CUdeviceptr pDecodedFrame[],       // handle - decoded framebuffer (or fields)
+	unsigned int* pDecodedFrame_pitch  // #bytes per scanline
 );
 //HRESULT cleanup(bool bDestroyContext);
 bool renderVideoFrame(HWND hWnd,
     CUVIDPICPARAMS *pDecodedPicInfo,   // decoded frame metainfo (I/B/P frame, etc.)
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
-    CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields)
+    CUdeviceptr pDecodedFrame[],       // handle - decoded framebuffer (or fields)
+	unsigned int* pDecodedFrame_pitch  // #bytes per scanline
 );
 bool GetFrame(
     bool *got_frame,
     CUVIDPICPARAMS *pDecodedPicInfo,   // decoded frame metainfo (I/B/P frame, etc.)
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
-    CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields)
+    CUdeviceptr pDecodedFrame[],       // handle - decoded framebuffer (or fields)
+	unsigned int* pDecodedFrame_pitch  // #bytes per scanline
 );
 bool GetFrameFinish(
     CUVIDPARSERDISPINFO *pDisplayInfo, // decoded frame information (pic-index)
     CUdeviceptr pDecodedFrame[]       // handle - decoded framebuffer (or fields)
 );
+
+bool initD3D9(HWND hWnd, const int unsigned width, const int unsigned height, int *pbTCC);
+
+protected:
+bool CreateD3D9device(HWND hWnd, const int unsigned adapternum, const int unsigned width, const int unsigned height);
 
 }; // class VideoDecode
 

@@ -22,15 +22,18 @@ typedef struct
     char *name;
 } _sVideoFormats;
 
-static _sVideoFormats eVideoFormats[] =
+static _sVideoFormats eVideoFormats[] =  // as of CUDA 6.5 library
 {
-    { cudaVideoCodec_MPEG1, "MPEG-1" },
-    { cudaVideoCodec_MPEG2, "MPEG-2" },
-    { cudaVideoCodec_MPEG4, "MPEG-4 (ASP)" },
-    { cudaVideoCodec_VC1,   "VC-1/WMV" },
-    { cudaVideoCodec_H264,  "AVC/H.264" },
-    { cudaVideoCodec_JPEG,  "M-JPEG" },
-    { cudaVideoCodec_NumCodecs,  "Invalid" },
+    { cudaVideoCodec_MPEG1, "MPEG-1" },       // 0
+    { cudaVideoCodec_MPEG2, "MPEG-2" },       // 1
+    { cudaVideoCodec_MPEG4, "MPEG-4 (ASP)" }, // 2
+    { cudaVideoCodec_VC1,   "VC-1/WMV" },     // 3
+    { cudaVideoCodec_H264,  "AVC/H.264" },    // 4
+    { cudaVideoCodec_JPEG,  "M-JPEG" },       // 5
+	{ cudaVideoCodec_H264_SVC, "AVC/H.264 SVC" }, // 6
+	{ cudaVideoCodec_H264_MVC, "AVC/H.264 MVC" }, // 7
+    { cudaVideoCodec_HEVC,  "HEVC/H.265" }, // 8
+    { cudaVideoCodec_NumCodecs,  "Invalid" }, // 9
     { cudaVideoCodec_YUV420,"YUV  4:2:0" },
     { cudaVideoCodec_YV12,  "YV12 4:2:0" },
     { cudaVideoCodec_NV12,  "NV12 4:2:0" },

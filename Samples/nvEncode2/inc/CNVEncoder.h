@@ -66,11 +66,13 @@
 #include "include/NvTypes.h"
 #include "threads/NvThreadingClasses.h"
 #include "nvEncodeAPI.h"
+#include <cuviddec.h> // cudaVideoChromaFormat
 
 #include <stdint.h>
 #include "guidutil2.h"
 
 #include <cuda.h>
+#include "crepackyuv.h"  // _convert_YUV420toNV12(), _convert_YUV444toY444, ...
 
 #define MAX_ENCODERS 16
 
@@ -131,7 +133,7 @@ typedef struct {
     int value_NV_ENC_CAPS_SUPPORT_BDIRECT_MODE;
     int value_NV_ENC_CAPS_SUPPORT_CABAC;
     int value_NV_ENC_CAPS_SUPPORT_ADAPTIVE_TRANSFORM;
-    int value_NV_ENC_CAPS_SUPPORT_STEREO_MVC;
+    //int value_NV_ENC_CAPS_SUPPORT_STEREO_MVC;
     int value_NV_ENC_CAPS_NUM_MAX_TEMPORAL_LAYERS;
     int value_NV_ENC_CAPS_SUPPORT_HIERARCHICAL_PFRAMES;
     int value_NV_ENC_CAPS_SUPPORT_HIERARCHICAL_BFRAMES;
@@ -168,7 +170,7 @@ const param_desc framefieldmode_names[] =
 {
     { 0,                                    "Invalid Frame/Field Mode" },
     { NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME, "Frame Mode"               },
-    { NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD, "Frame Mode"               },
+    { NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD, "Field Mode"               },
     { NV_ENC_PARAMS_FRAME_FIELD_MODE_MBAFF, "MB adaptive frame/field"  }
 };
 
@@ -261,28 +263,18 @@ const param_desc encode_picture_types[] =
 };
 
 /**
- *  * Input slice type
- *   */
-const param_desc encode_slice_type[] =
-{
-   { NV_ENC_SLICE_TYPE_DEFAULT, "0 = Slice type is same as picture type" }, 
-   { 1   ,                      "1 = Invalid slice type mode"            },
-   { NV_ENC_SLICE_TYPE_I,       "2 = Intra predicted slice"              },
-   { NV_ENC_SLICE_TYPE_UNKNOWN, "0xFF = Slice type unknown"              }
-};
-
-/**
  *  * Motion vector precisions
  *   */
 const param_desc encode_precision_mv[] =
 {
-    { 0,                               "0 = Invalid encode MV precision" },
+    { NV_ENC_MV_PRECISION_DEFAULT,     "0 = Default (drive selects quarterpel"   },       /**<Driver selects QuarterPel motion vector precision by default*/
     { NV_ENC_MV_PRECISION_FULL_PEL,    "1 = Full-Pel    Motion Vector precision" },
     { NV_ENC_MV_PRECISION_HALF_PEL,    "2 = Half-Pel    Motion Vector precision" }, 
     { NV_ENC_MV_PRECISION_QUARTER_PEL, "3 = Quarter-Pel Motion Vector precision" },
 };
 
 const st_guid_entry table_nv_enc_mv_precision_names[] = {
+	GUID_ENTRY(NO_GUID, NV_ENC_MV_PRECISION_DEFAULT),
 	GUID_ENTRY(NO_GUID, NV_ENC_MV_PRECISION_FULL_PEL),
 	GUID_ENTRY(NO_GUID, NV_ENC_MV_PRECISION_HALF_PEL),
 	GUID_ENTRY(NO_GUID, NV_ENC_MV_PRECISION_QUARTER_PEL)
@@ -300,29 +292,31 @@ const guid_desc codec_names[] =
     { NV_ENC_CODEC_H264_GUID, "Invalid Codec Setting" , 1},
     { NV_ENC_CODEC_H264_GUID, "Invalid Codec Setting" , 2},
     { NV_ENC_CODEC_H264_GUID, "Invalid Codec Setting" , 3},
-    { NV_ENC_CODEC_H264_GUID, "H.264 Codec"           , 4}
+    { NV_ENC_CODEC_H264_GUID, "H.264 Codec"           , 4},
+	{ NV_ENC_CODEC_HEVC_GUID, "H.265 Codec"           , 5}
 };
 
-typedef enum { // updated for NVENC SDK 4.0 (Aug 2014)
-	NV_ENC_H264_PROFILE_AUTOSELECT = 0,
+typedef enum { // updated for NVENC SDK 5.0 (Dec 2014)
+	NV_ENC_CODEC_PROFILE_AUTOSELECT = 0,
     NV_ENC_H264_PROFILE_BASELINE= 66 ,
     NV_ENC_H264_PROFILE_MAIN    = 77 ,
     NV_ENC_H264_PROFILE_HIGH    = 100,
     NV_ENC_H264_PROFILE_STEREO  = 128,
 	NV_ENC_H264_PROFILE_HIGH_444 = 244,
-//	NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY,
-	NV_ENC_H264_PROFILE_CONSTRAINED_HIGH = 257
+	NV_ENC_H264_PROFILE_CONSTRAINED_HIGH = 257,
+	NV_ENC_HEVC_PROFILE_MAIN     = 300
 } enum_NV_ENC_H264_PROFILE;
 
-const guid_desc codecprofile_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
+const guid_desc codecprofile_names[] =  // updated for NVENC SDK 5.0 (Dec 2014)
 {
-    { NV_ENC_H264_PROFILE_AUTOSELECT_GUID, "H.264 Auto", NV_ENC_H264_PROFILE_AUTOSELECT },
-    { NV_ENC_H264_PROFILE_BASELINE_GUID, "H.264 Baseline", NV_ENC_H264_PROFILE_BASELINE },
-    { NV_ENC_H264_PROFILE_MAIN_GUID,     "H.264 Main Profile", NV_ENC_H264_PROFILE_MAIN },
-    { NV_ENC_H264_PROFILE_HIGH_GUID,     "H.264 High Profile", NV_ENC_H264_PROFILE_HIGH },
-    { NV_ENC_H264_PROFILE_STEREO_GUID,   "H.264 Stereo Profile", NV_ENC_H264_PROFILE_STEREO },
-    { NV_ENC_H264_PROFILE_HIGH_444_GUID,   "H.264 444 Profile", NV_ENC_H264_PROFILE_HIGH_444 },
-	{ NV_ENC_H264_PROFILE_CONSTRAINED_HIGH_GUID, "H.264 Constrained High Profile", NV_ENC_H264_PROFILE_CONSTRAINED_HIGH }
+	{ NV_ENC_CODEC_PROFILE_AUTOSELECT_GUID,     "H.264/H.EVC Auto", NV_ENC_CODEC_PROFILE_AUTOSELECT },
+    { NV_ENC_H264_PROFILE_BASELINE_GUID,        "H.264 Baseline", NV_ENC_H264_PROFILE_BASELINE },
+    { NV_ENC_H264_PROFILE_MAIN_GUID,            "H.264 Main Profile", NV_ENC_H264_PROFILE_MAIN },
+    { NV_ENC_H264_PROFILE_HIGH_GUID,            "H.264 High Profile", NV_ENC_H264_PROFILE_HIGH },
+    { NV_ENC_H264_PROFILE_STEREO_GUID,          "H.264 Stereo Profile", NV_ENC_H264_PROFILE_STEREO },
+    { NV_ENC_H264_PROFILE_HIGH_444_GUID,        "H.264 444 Profile", NV_ENC_H264_PROFILE_HIGH_444 }, // NVENC 4.0 API
+    { NV_ENC_H264_PROFILE_CONSTRAINED_HIGH_GUID,"H.264 Constrained High Profile", NV_ENC_H264_PROFILE_CONSTRAINED_HIGH },
+	{ NV_ENC_HEVC_PROFILE_MAIN_GUID,            "H.265 Main Profile", NV_ENC_HEVC_PROFILE_MAIN } // NVENC 5.0 API
 };
 
 const guid_desc preset_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
@@ -341,24 +335,26 @@ const guid_desc preset_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
 
 
 typedef enum {
-	NV_ENC_CODEC_H264  = 4
+	NV_ENC_CODEC_H264  = 4,
+	NV_ENC_CODEC_HEVC  = 5
 } enum_NV_ENC_CODEC;
 
 const st_guid_entry table_nv_enc_codec_names[] = {
-	GUID_ENTRY_I( NV_ENC_CODEC_H264  )
+	GUID_ENTRY_I( NV_ENC_CODEC_H264  ),
+	GUID_ENTRY_I( NV_ENC_CODEC_HEVC  )
 };
 
 // table_nv_enc_profile_names[] must be aligned with codecprofile_names[]
 // (i.e. entries must be listed in the exact same order
 const st_guid_entry table_nv_enc_profile_names[] = {
-	GUID_ENTRY_I( NV_ENC_H264_PROFILE_AUTOSELECT ), 
+	GUID_ENTRY_I( NV_ENC_CODEC_PROFILE_AUTOSELECT),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_BASELINE ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_MAIN ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_HIGH ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_STEREO ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_HIGH_444 ),
-//	GUID_ENTRY_I( NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY ),
-	GUID_ENTRY_I( NV_ENC_H264_PROFILE_CONSTRAINED_HIGH )
+	GUID_ENTRY_I( NV_ENC_H264_PROFILE_CONSTRAINED_HIGH ),
+	GUID_ENTRY_I( NV_ENC_HEVC_PROFILE_MAIN )
 };
 
 typedef enum
@@ -406,7 +402,14 @@ const st_guid_entry table_nv_enc_buffer_format_names[] = {
     GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16  ) , /**< Planar YUV [YUV separate bytes per pixel] allocated as 64x16 tiles.      */
 };
 
-const st_guid_entry table_nv_enc_level_names[] = {
+const st_guid_entry table_cudaVideoChromaFormat_names[] = {
+	GUID_ENTRY( NO_GUID, cudaVideoChromaFormat_Monochrome ),
+	GUID_ENTRY( NO_GUID, cudaVideoChromaFormat_420        ),
+	GUID_ENTRY( NO_GUID, cudaVideoChromaFormat_422        ),
+	GUID_ENTRY( NO_GUID, cudaVideoChromaFormat_444        )
+};
+
+const st_guid_entry table_nv_enc_level_h264_names[] = {
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_AUTOSELECT         ) ,
     
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_1             ) ,
@@ -425,6 +428,40 @@ const st_guid_entry table_nv_enc_level_names[] = {
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_42            ) ,
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_5             ) ,
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_51            )
+};
+
+const st_guid_entry table_nv_enc_level_hevc_names[] = {
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_AUTOSELECT         ),
+
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_1             ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_2             ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_21            ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_3             ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_31            ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_4             ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_41            ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_5             ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_51            ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_52            ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_6             ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_61            ),
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_HEVC_62            )
+};
+
+const st_guid_entry table_nv_enc_tier_hevc_names[] = {
+	GUID_ENTRY( NO_GUID, NV_ENC_TIER_HEVC_MAIN           ),
+    GUID_ENTRY( NO_GUID, NV_ENC_TIER_HEVC_HIGH           )
+};
+
+/**
+*  HEVC CU SIZE
+*/
+const st_guid_entry table_nv_enc_hevc_cusize_names[] = {
+	GUID_ENTRY( NO_GUID, NV_ENC_HEVC_CUSIZE_AUTOSELECT ),
+	GUID_ENTRY( NO_GUID, NV_ENC_HEVC_CUSIZE_8x8        ),
+	GUID_ENTRY( NO_GUID, NV_ENC_HEVC_CUSIZE_16x16      ),
+	GUID_ENTRY( NO_GUID, NV_ENC_HEVC_CUSIZE_32x32      ),
+	GUID_ENTRY( NO_GUID, NV_ENC_HEVC_CUSIZE_64x64      )
 };
 
 const st_guid_entry table_nv_enc_h264_fmo_names[] = {
@@ -513,7 +550,8 @@ inline void printProfileGUIDName(GUID guid)
 typedef enum _NvEncodeCompressionStd
 {
     NV_ENC_Unknown=-1,
-    NV_ENC_H264=4      // 14496-10
+    NV_ENC_H264=4,      // 14496-10 (AVC)
+	NV_ENC_H265=5       // HEVC 
 }NvEncodeCompressionStd;
 
 typedef enum _NvEncodeInterfaceType
@@ -582,16 +620,15 @@ struct EncodeConfig
     unsigned int              numEncFrames;// #frames to encode (not used)
     int                       stereo3dMode;
     int                       stereo3dEnable;
-    int                       numSlices;
+	unsigned int              sliceMode; // always use 3 (divide a picture into <sliceModeData> slices)
+    int                       sliceModeData;
 	unsigned int              vbvBufferSize;
     unsigned int              vbvInitialDelay;
     unsigned int              level;     // encode level setting (41 = bluray)
-    unsigned int              idr_period;// I-frame don't re-use period
+	unsigned int              idr_period;// I-frame don't re-use period
     NV_ENC_H264_ENTROPY_CODING_MODE vle_entropy_mode;// (high-profile only) enable CABAC
-    NV_ENC_BUFFER_FORMAT      chromaFormatIDC;// chroma format
-    unsigned int              useChroma444hack;// (4:4:4 only) use chromaformat hack to init session
-		// instead of passing to NV_ENC_BUFFER_FORMAT_YUV444_PL to OpenSession,
-		// use NV_ENC_BUFFER_FORMAT_NV12_TILED64x16
+    //NV_ENC_BUFFER_FORMAT      chromaFormatIDC;// chroma format (typo, wrong typedef?)
+	cudaVideoChromaFormat     chromaFormatIDC;// chroma format
 	unsigned int              separateColourPlaneFlag; // (for YUV444 only)
     unsigned int              output_sei_BufferPeriod;
     NV_ENC_MV_PRECISION       mvPrecision; // 1=FULL_PEL, 2=HALF_PEL, 3= QUARTER_PEL
@@ -600,7 +637,7 @@ struct EncodeConfig
     unsigned int              aud_enable;
     unsigned int              report_slice_offsets;
     unsigned int              enableSubFrameWrite;
-    unsigned int              disable_deblocking;
+    unsigned int              disableDeblock;
     unsigned int              disable_ptd;
     NV_ENC_H264_ADAPTIVE_TRANSFORM_MODE adaptive_transform_mode;
 	NV_ENC_H264_BDIRECT_MODE  bdirectMode;// 0=auto, 1=disable, 2 = temporal, 3=spatial
@@ -616,6 +653,10 @@ struct EncodeConfig
     unsigned int              max_ref_frames; // maximum #reference frames (2 required for B-frames)
     unsigned int              monoChromeEncoding;// monoChrome encoding
 
+	unsigned int              enableLTR;    // long term reference frames (only supported in HEVC)
+	unsigned int              ltrNumFrames;
+	unsigned int              ltrTrustMode;
+
 	//NVENC API v3.0
 	unsigned int              enableVFR; // enable variable frame rate mode
 
@@ -623,7 +664,12 @@ struct EncodeConfig
 	unsigned int              qpPrimeYZeroTransformBypassFlag;// (for lossless encoding: set to 1, else set 0)
 	unsigned int              enableAQ; // enable adaptive quantization
 
-	void print( string &stringout ) const;
+	//NVENC API v5.0
+	unsigned int              tier;      // (HEVC only) encode tier setting (0 = main)
+	NV_ENC_HEVC_CUSIZE        minCUsize; // (HEVC only) minimum coding unit size
+	NV_ENC_HEVC_CUSIZE        maxCUsize; // (HEVC only) maximum coding unit size
+
+	void print(string &stringout) const;
 };
 
 struct EncodeInputSurfaceInfo
@@ -702,15 +748,6 @@ struct EncoderGPUInfo
 
 class CNvEncoderThread;
 
-// {585D7FE6-531D-496c-856A-5DE6A39224A5} 
-	const GUID NV_CLIENT_KEY_TEST = { 0x585d7fe6, 0x531d, 0x496c, { 0x85, 0x6a, 0x5d, 0xe6, 0xa3, 0x92, 0x24, 0xa5 } };// works with 314.07
-
-// {D91132EC-C576-4f69-B668-B0690B0BE1C4}
-	const GUID NV_ENC_CLIENT_PRO_TRIAL  = { 0xd91132ec, 0xc576, 0x4f69, { 0xb6, 0x68, 0xb0, 0x69, 0xb, 0xb, 0xe1, 0xc4 } }; // error 21
-// // {73E2B513-A956-444e-8EF1-77A54A09F0BE}
-	const GUID NV_ENC_CLIENT_FREE_TRIAL = { 0x73e2b513, 0xa956, 0x444e, { 0x8e, 0xf1, 0x77, 0xa5, 0x4a, 0x9, 0xf0, 0xbe } };// works with 310.90, not with 314.07
-	const GUID NVENC_KEY = NV_CLIENT_KEY_TEST;
-
 // The main Encoder Class interface
 class CNvEncoder
 {
@@ -742,7 +779,6 @@ public: // temp-hack
     ID3D10Device*                                        m_pD3D10Device;
     ID3D11Device*                                        m_pD3D11Device;
 #endif
-//    CUcontext                                            m_cuContext; // videodecoder needs to share this context
     unsigned int                                         m_dwEncodeGUIDCount;// Number of Encoding GUIDs (codecs)
 	GUID                                                *m_stEncodeGUIDArray;// List of Encoding GUIDs (H264, VC-1, MPEG-2, etc.)
     GUID                                                 m_stEncodeGUID;     // codec choice (H264, VC1, MPEG-2, etc.)
@@ -778,29 +814,33 @@ public: // temp-hack
     CNvEncoderThread                                    *m_pEncoderThread;
     unsigned char                                       *m_pYUV[3];
     bool                                                 m_bAsyncModeEncoding; // only avialable on Windows Platforms
+	bool                                                 m_useExternalContext;
     unsigned char                                        m_pUserData[128];
     NV_ENC_SEQUENCE_PARAM_PAYLOAD                        m_spspps;
     EncodeOutputBuffer                                   m_stEOSOutputBfr; 
     CNvQueue<EncoderThreadData, MAX_OUTPUT_QUEUE>        m_pEncodeFrameQueue;
 
 public:
+    virtual void                                         UseExternalCudaContext(const CUcontext context, const unsigned int deviceID);
     virtual HRESULT                                      OpenEncodeSession(const EncodeConfig encodeConfig, const unsigned int deviceID, NVENCSTATUS &nvencstatus);
 
 	// QueryEncodeSession() : opens a new encode-session to get its capabilities and return it to the caller.
 	//                        automatically closes the encode-session.
 	//                        *This method should NOT be called if an Encodesession is already open!*
-	virtual NVENCSTATUS                                  QueryEncodeSession(const unsigned int deviceID, nv_enc_caps_s &nv_enc_caps);
+	virtual NVENCSTATUS                                  QueryEncodeSession(const unsigned int deviceID, nv_enc_caps_s &nv_enc_caps, const bool destroy_on_exit = true);
+	virtual NVENCSTATUS                                  QueryEncodeSessionCodec(const unsigned int deviceID, const NvEncodeCompressionStd codec, nv_enc_caps_s &nv_enc_caps);
     virtual HRESULT                                      InitializeEncoder() = 0;
-    virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui ) = 0;
-    virtual HRESULT                                      EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush=false) = 0;
+    //virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui ) = 0;
+	virtual HRESULT                                      InitializeEncoderCodec(void * const p) = 0;
+	//virtual HRESULT                                      EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush = false) = 0;
 	virtual HRESULT                                      EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const bool bFlush) = 0;
-    virtual HRESULT                                      EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUdeviceptr oFrame[], bool bFlush=false) = 0;
+    virtual HRESULT                                      EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUdeviceptr oFrame[], const unsigned int oFrame_pitch, bool bFlush=false) = 0;
     virtual HRESULT                                      DestroyEncoder() = 0;
    
     virtual HRESULT                                      CopyBitstreamData(EncoderThreadData stThreadData);
     virtual HRESULT                                      CopyFrameData(FrameThreadData stFrameData);
 
-    HRESULT                                              QueryEncodeCaps(NV_ENC_CAPS caps_type, int *p_nCapsVal);
+	HRESULT                                              QueryEncodeCaps(NV_ENC_CAPS caps_type, int *p_nCapsVal);
 	void PrintGUID( const GUID &guid) const;
 	void PrintEncodeFormats(string &s) const;
 	void PrintEncodeProfiles(string &s) const;
@@ -808,14 +848,24 @@ public:
 	void PrintBufferFormats(string &s) const; // print list of supported _NV_ENC_BUFFER_FORMAT
 
 	// Query all NV_ENC_CAP properties of an already opened EncodeSession.
-	HRESULT  QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps );
+	HRESULT  QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps ); // reutrn caps for currently configured codec (m_stEncodeGUID)
+	HRESULT  _QueryEncoderCaps(const GUID &codecGUID, nv_enc_caps_s &nv_enc_caps);// return caps for user-requested codecGUID
 	
+	// Set the codec-type (H264 or HEVC): this must be called after InitializeEncoder(),
+	// and before OpenEncodeSession()
+	bool SetCodec(const enum_NV_ENC_CODEC codec);
+	enum_NV_ENC_CODEC GetCodec() const;
+
 	// initEncoderConfig - initialize p_nvEncoderConfig to default values for encoding H.264 video
 	//    Arguments
 	//     p_nvEncoderConfig    valid pointer to NvEncodeConfig struct
 	void initEncoderConfig(EncodeConfig *p_EncoderConfig); // (For PPro plugin, initialize the caller supplied p_nvEncoderConfig)
     HRESULT                                              GetPresetConfig(const int iPresetIdx);	
+
+	// the fwrite_callback() is a caller supplied function that implements receives the compressed bitstream
+	// from the output of the nvEncode-API. (Typically, this data is written to a file.)
 	void                                                 Register_fwrite_callback( fwrite_callback_t callback );
+	CRepackyuv                                           m_Repackyuv;
 
 protected:
 #if defined (NV_WINDOWS) // Windows uses Direct3D or CUDA to access NVENC
@@ -829,8 +879,9 @@ protected:
 
     unsigned char*                                       LockInputBuffer(void * hInputSurface, unsigned int *pLockedPitch);
     HRESULT                                              UnlockInputBuffer(void * hInputSurface);
-    unsigned int                                         GetCodecType(const GUID &encodeGUID);
-    unsigned int                                         GetCodecProfile(const GUID &encodeGUID);
+	unsigned int                                         GetCodecType(const GUID &encodeGUID) const;
+	GUID                                                 GetCodecGUID(const NvEncodeCompressionStd codec) const;
+    unsigned int                                         GetCodecProfile(const GUID &encodeGUID) const;
 //  HRESULT                                              GetPresetConfig(int iPresetIdx);
 
     HRESULT                                              FlushEncoder();
@@ -856,12 +907,8 @@ public:
     NV_ENCODE_API_FUNCTION_LIST*                         m_pEncodeAPI;
     HINSTANCE                                            m_hinstLib;
     bool                                                 m_bEncodeAPIFound;
-	/*
-	typedef struct ExportSettings;
 
-	friend void update_exportParamSuite_GPUSelectGroup(
-		const csSDK_uint32 exID,
-		ExportSettings *lRec);*/
+	const static uint32_t MAX_QP = 51; // H264/HEVC qunatization (QP) : maximum allowed value
 };// class CNvEncoder
 
 class CNvEncoderThread: public CNvThread
@@ -911,8 +958,12 @@ typedef NVENCSTATUS (*MYPROC)(NV_ENCODE_API_FUNCTION_LIST*);
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_profile_names )
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_preset_names )
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_buffer_format_names )
-	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_level_names )
-	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_h264_fmo_names )
+	CREATE_NV_ENC_PARAM_DESCRIPTOR( cudaVideoChromaFormat_names )
+	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_level_h264_names )
+	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_level_hevc_names)
+	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_tier_hevc_names)
+	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_h264_fmo_names)
+	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_hevc_cusize_names )
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_h264_entropy_coding_mode_names )
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_adaptive_transform_names )
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_stereo_packing_mode_names )

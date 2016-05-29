@@ -16,6 +16,10 @@
 #include <cassert>
 #include <string>
 
+// CUDA utilities and system includes
+#include <helper_functions.h>
+#include <helper_cuda_drvapi.h>    // helper file for CUDA Driver API calls and error checking
+
 VideoDecoder::VideoDecoder(const CUVIDEOFORMAT &rVideoFormat,
                            CUcontext &rContext,
                            cudaVideoCreateFlags eCreateFlags,
@@ -59,7 +63,10 @@ VideoDecoder::VideoDecoder(const CUVIDEOFORMAT &rVideoFormat,
            cudaVideoCodec_MPEG4 == rVideoFormat.codec ||
            cudaVideoCodec_VC1   == rVideoFormat.codec ||
            cudaVideoCodec_H264  == rVideoFormat.codec ||
+           cudaVideoCodec_H264_SVC  == rVideoFormat.codec ||
+           cudaVideoCodec_H264_MVC  == rVideoFormat.codec ||
            cudaVideoCodec_JPEG  == rVideoFormat.codec ||
+           cudaVideoCodec_HEVC  == rVideoFormat.codec ||
            cudaVideoCodec_YUV420== rVideoFormat.codec ||
            cudaVideoCodec_YV12  == rVideoFormat.codec ||
            cudaVideoCodec_NV12  == rVideoFormat.codec ||
@@ -79,30 +86,49 @@ VideoDecoder::VideoDecoder(const CUVIDEOFORMAT &rVideoFormat,
     oVideoDecodeCreateInfo_.ulHeight            = rVideoFormat.coded_height;
     oVideoDecodeCreateInfo_.ulNumDecodeSurfaces = FrameQueue::cnMaximumSize;
 
-    // Limit decode memory to 64MB (48M pixels at 4:2:0 = 64M bytes)
-    while (oVideoDecodeCreateInfo_.ulNumDecodeSurfaces * rVideoFormat.coded_width * rVideoFormat.coded_height > 48*1024*1024)
+    // Allocate the equivalent of 64M pixels worth of surfaces
+	//   (this is more than enough for H264 high-profile L5.2)
+    while (oVideoDecodeCreateInfo_.ulNumDecodeSurfaces * rVideoFormat.coded_width * rVideoFormat.coded_height > 64*1024*1024)
     {
         oVideoDecodeCreateInfo_.ulNumDecodeSurfaces--;
     }
 
     oVideoDecodeCreateInfo_.ChromaFormat        = rVideoFormat.chroma_format;
     oVideoDecodeCreateInfo_.OutputFormat        = cudaVideoSurfaceFormat_NV12;
-    oVideoDecodeCreateInfo_.DeinterlaceMode     = cudaVideoDeinterlaceMode_Adaptive;
+//    oVideoDecodeCreateInfo_.DeinterlaceMode     = cudaVideoDeinterlaceMode_Adaptive;
+    oVideoDecodeCreateInfo_.DeinterlaceMode     = cudaVideoDeinterlaceMode_Weave;
 
-    // No scaling
+    // No scaling.
+	// ulTargetWidth influences the pitch of the (2D) output surfaces.
+	//  the GPU-driver will always allocate a 2D-framebuffer large enough to accomodate the
+	//  the user-specified output-size.  We can use this to our advantage by rounding the
+	//  ulTargetWidth up to a multiple of 4096 (to match the NVENC encoder's input-surface pitch.)
     oVideoDecodeCreateInfo_.ulTargetWidth       = oVideoDecodeCreateInfo_.ulWidth;
     oVideoDecodeCreateInfo_.ulTargetHeight      = oVideoDecodeCreateInfo_.ulHeight;
     oVideoDecodeCreateInfo_.ulNumOutputSurfaces = MAX_FRAME_COUNT;  // We won't simultaneously map more than 8 surfaces
     oVideoDecodeCreateInfo_.ulCreationFlags     = m_VideoCreateFlags;
     oVideoDecodeCreateInfo_.vidLock             = vidCtxLock;
+
+    oVideoDecodeCreateInfo_.display_area.left   = rVideoFormat.display_area.left;
+    oVideoDecodeCreateInfo_.display_area.top    = rVideoFormat.display_area.top;
+    oVideoDecodeCreateInfo_.display_area.right  = rVideoFormat.display_area.right;
+    oVideoDecodeCreateInfo_.display_area.bottom = rVideoFormat.display_area.bottom;
+
     // create the decoder
-    CUresult oResult = cuvidCreateDecoder(&oDecoder_, &oVideoDecodeCreateInfo_);
-    assert(CUDA_SUCCESS == oResult);
+	CUresult oresult = cuvidCreateDecoder(&oDecoder_, &oVideoDecodeCreateInfo_);
+
+	// if the attempt failed, then retry with CUVID
+	if ( oresult != CUDA_SUCCESS && oVideoDecodeCreateInfo_.ulCreationFlags == cudaVideoCreate_PreferDXVA ) {
+		printf( "cuvidCreateDecoder() failed for ulCreationFlags==%0u, retrying with cudaVideoCreate_PreferCUVID\n",
+			oVideoDecodeCreateInfo_.ulCreationFlags );
+		oVideoDecodeCreateInfo_.ulCreationFlags = cudaVideoCreate_PreferCUVID;
+		checkCudaErrors(cuvidCreateDecoder(&oDecoder_, &oVideoDecodeCreateInfo_));
+	}
 }
 
 VideoDecoder::~VideoDecoder()
 {
-    cuvidDestroyDecoder(oDecoder_);
+    checkCudaErrors(cuvidDestroyDecoder(oDecoder_));
 }
 
 cudaVideoCodec
@@ -157,9 +183,18 @@ const
 void
 VideoDecoder::decodePicture(CUVIDPICPARAMS *pPictureParameters, CUcontext *pContext)
 {
+	// for debug
     // Handle CUDA picture decode (this actually calls the hardware VP/CUDA to decode video frames)
     CUresult oResult = cuvidDecodePicture(oDecoder_, pPictureParameters);
-    assert(CUDA_SUCCESS == oResult);
+/* for debug only
+    const CUVIDMPEG2PICPARAMS &mpeg2 = pPictureParameters->CodecSpecific.mpeg2;          // Also used for MPEG-1
+    const CUVIDH264PICPARAMS  &h264  = pPictureParameters->CodecSpecific.h264;
+    const CUVIDVC1PICPARAMS   &vc1   = pPictureParameters->CodecSpecific.vc1;
+    const CUVIDMPEG4PICPARAMS &mpeg4 = pPictureParameters->CodecSpecific.mpeg4;
+    const CUVIDJPEGPICPARAMS  &jpeg  = pPictureParameters->CodecSpecific.jpeg;
+    const CUVIDHEVCPICPARAMS  &hevc  = pPictureParameters->CodecSpecific.hevc;
+*/
+	checkCudaErrors( oResult );
 }
 
 void
@@ -169,7 +204,7 @@ VideoDecoder::mapFrame(int iPictureIndex, CUdeviceptr *ppDevice, unsigned int *p
                                           iPictureIndex,
                                           ppDevice,
                                           pPitch, pVideoProcessingParameters);
-    assert(CUDA_SUCCESS == oResult);
+	checkCudaErrors( oResult );
     assert(0 != *ppDevice);
     assert(0 != *pPitch);
 }
@@ -178,6 +213,6 @@ void
 VideoDecoder::unmapFrame(CUdeviceptr pDevice)
 {
     CUresult oResult = cuvidUnmapVideoFrame(oDecoder_, pDevice);
-    assert(CUDA_SUCCESS == oResult);
+	checkCudaErrors( oResult );
 }
 

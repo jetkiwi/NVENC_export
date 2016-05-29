@@ -11,7 +11,7 @@
 
 #include<sstream>
 #include <include/videoFormats.h>
-#include <CNVEncoderH264.h>
+#include <CNvEncoderH265.h>
 #include <xcodeutil.h>
 
 #include <helper_cuda_drvapi.h>    // helper file for CUDA Driver API calls and error checking
@@ -28,15 +28,15 @@
 
 
 /**
-* \file CNVEncoderH264.cpp
-* \brief CNVEncoderH264 is the Class interface for the Hardware Encoder (NV Encode API H.264)
+* \file CNvEncoderH265.cpp
+* \brief CNvEncoderH265 is the Class interface for the Hardware Encoder (NV Encode API H.264)
 * \date 2011 
-*  This file contains the CNvEncoderH264 class declaration and data structures
+*  This file contains the CNvEncoderH265 class declaration and data structures
 */
 
 
 // H264 Encoder
-CNvEncoderH264::CNvEncoderH264()
+CNvEncoderH265::CNvEncoderH265()
 {
     m_uMaxHeight = 0;
     m_uMaxWidth = 0;
@@ -46,7 +46,7 @@ CNvEncoderH264::CNvEncoderH264()
 	memset( (void *) &m_sei_user_payload, 0, sizeof(m_sei_user_payload) );
 }
 
-CNvEncoderH264::~CNvEncoderH264()
+CNvEncoderH265::~CNvEncoderH265()
 {
 	DestroyEncoder();
 
@@ -54,12 +54,12 @@ CNvEncoderH264::~CNvEncoderH264()
 		delete [] m_sei_user_payload.payload;
 }
 
-HRESULT CNvEncoderH264::InitializeEncoder()
+HRESULT CNvEncoderH265::InitializeEncoder()
 {
     return E_FAIL;
 }
 
-HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
+HRESULT CNvEncoderH265::InitializeEncoderCodec(void * const p)
 {
 	NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui;
 
@@ -72,7 +72,7 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
     HRESULT hr           = S_OK;
     int numFrames        = 0;
     NVENCSTATUS nvStatus = NV_ENC_SUCCESS;
-    bool bMVCEncoding    = m_stEncoderInput.profile == NV_ENC_H264_PROFILE_STEREO ? true : false;
+	bool bMVCEncoding    = false; // m_stEncoderInput.profile == NV_ENC_H264_PROFILE_STEREO ? true : false;
     m_bAsyncModeEncoding = ((m_stEncoderInput.syncMode==0) ? true : false);
 	string            s; // text-buffer
 	ostringstream   oss; // text-buffer to generate encoder-settings
@@ -131,7 +131,7 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 	NvAPI_Status      nvs = NvAPI_SYS_GetDriverAndBranchVersion( &NVidia_DriverVersion, szBuildBranchString);
 
 	//oss << "x264 - core 141 - H.264/MPEG-4 AVC codec - Copyleft 2003-2012 - " << __DATE__ "}, NVENC API " << std::dec << NVENCAPI_MAJOR_VERSION
-	oss << "CNvEncoderH264[" << __DATE__  << ", NVENC API "
+	oss << "CNvEncoderH265[" << __DATE__  << ", NVENC API "
 		<< std::dec << NVENCAPI_MAJOR_VERSION << "."
 		<< std::dec << NVENCAPI_MINOR_VERSION << "]"
 		<< gpu_name;
@@ -225,36 +225,36 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 				break;
 		}
 
-		if ( m_stEncoderInput.initial_qp_ena ) {
-			oss << ",IniQP(I:P:B)="
-				<< std::dec << m_stEncoderInput.initial_qpI << ":"
-				<< std::dec << m_stEncoderInput.initial_qpP << ":"
-				<< std::dec << m_stEncoderInput.initial_qpB;
+		switch( m_stInitEncParams.encodeConfig->rcParams.rateControlMode ) {
+			case NV_ENC_PARAMS_RC_CONSTQP:        /**< Constant QP mode */
+			case NV_ENC_PARAMS_RC_VBR_MINQP:      /**< Variable bitrate mode with MinQP */
+			case NV_ENC_PARAMS_RC_2_PASS_QUALITY: /**< Multi pass encoding optimized for image quality and works only with low latency mode */
+			case NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP: /**< Multi pass encoding optimized for maintaining frame size and works only with low latency mode */
+				if ( m_stEncoderInput.initial_qp_ena ) {
+					oss << ",IniQP(I:P:B)="
+						<< std::dec << m_stEncoderInput.initial_qpI << ":"
+						<< std::dec << m_stEncoderInput.initial_qpP << ":"
+						<< std::dec << m_stEncoderInput.initial_qpB;
+				}
+
+				if ( m_stEncoderInput.min_qp_ena ) {
+					oss << ",MinQP(I:P:B)="
+						<< std::dec << m_stEncoderInput.min_qpI << ":"
+						<< std::dec << m_stEncoderInput.min_qpP << ":"
+						<< std::dec << m_stEncoderInput.min_qpB;
+				}
+
+				if ( m_stEncoderInput.max_qp_ena ) {
+					oss << ",MaxQP(I:P:B)="
+						<< std::dec << m_stEncoderInput.max_qpI << ":"
+						<< std::dec << m_stEncoderInput.max_qpP << ":"
+						<< std::dec << m_stEncoderInput.max_qpB;
+				}
+				break;
 		}
 
-		if (m_stEncoderInput.min_qp_ena && m_stEncoderInput.max_qp_ena) {
-			oss << ",Min*MaxQP(I:P:B)=" 
-				<< std::dec << m_stEncoderInput.min_qpI << ":"
-				<< std::dec << m_stEncoderInput.min_qpP << ":"
-				<< std::dec << m_stEncoderInput.min_qpB << "*"
-				<< std::dec << m_stEncoderInput.max_qpI << ":"
-				<< std::dec << m_stEncoderInput.max_qpP << ":"
-				<< std::dec << m_stEncoderInput.max_qpB;
-		}
-		else if (m_stEncoderInput.min_qp_ena) {
-			oss << ",MinQP(I:P:B)="
-				<< std::dec << m_stEncoderInput.min_qpI << ":"
-				<< std::dec << m_stEncoderInput.min_qpP << ":"
-				<< std::dec << m_stEncoderInput.min_qpB;
-		}
-		else if (m_stEncoderInput.max_qp_ena) {
-			oss << ",MaxQP(I:P:B)="
-				<< std::dec << m_stEncoderInput.max_qpI << ":"
-				<< std::dec << m_stEncoderInput.max_qpP << ":"
-				<< std::dec << m_stEncoderInput.max_qpB;
-		}
-
-		// report adaptive-quantization for everything, 'cause I don't know its effect
+		// (for ConstQP and MinQP only), report adaptive-quantization
+		//  actually, report it for everything, 'cause I don't know its effect
 		if (m_stInitEncParams.encodeConfig->rcParams.enableAQ )
 			oss << ",AQ"; // adaptive quantization
 
@@ -294,22 +294,26 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 		ADD_ENCODECONFIG_2_OSS2(frameFieldMode,"frameMode");
 		ADD_ENCODECONFIG_2_OSS2(mvPrecision,"mv");
 
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.disableDeblockingFilterIDC = m_stEncoderInput.disableDeblock; // alawys enable deblk filter for h264
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.adaptiveTransformMode      = (m_stEncoderInput.profile >= NV_ENC_H264_PROFILE_HIGH) ? m_stEncoderInput.adaptive_transform_mode : NV_ENC_H264_ADAPTIVE_TRANSFORM_AUTOSELECT;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.fmoMode                    = m_stEncoderInput.enableFMO;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.bdirectMode                = m_stEncoderInput.numBFrames > 0 ? m_stEncoderInput.bdirectMode : NV_ENC_H264_BDIRECT_MODE_DISABLE;
-//        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.bdirectMode                = m_stEncoderInput.numBFrames > 0 ? NV_ENC_H264_BDIRECT_MODE_TEMPORAL : NV_ENC_H264_BDIRECT_MODE_DISABLE;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.outputAUD                  = m_stEncoderInput.aud_enable;
-//      m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.entropyCodingMode        = (m_stEncoderInput.profile > NV_ENC_H264_PROFILE_BASELINE) ? m_stEncoderInput.vle_entropy_mode : NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.idrPeriod                = m_stInitEncParams.encodeConfig->gopLength ;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.level                    = m_stEncoderInput.level;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.numTemporalLayers        = m_stEncoderInput.numlayers;
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.disableDeblockAcrossSliceBoundary = m_stEncoderInput.disableDeblock;
+        //m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.adaptiveTransformMode      = (m_stEncoderInput.profile >= NV_ENC_H264_PROFILE_HIGH) ? m_stEncoderInput.adaptive_transform_mode : NV_ENC_H264_ADAPTIVE_TRANSFORM_AUTOSELECT;
+        //m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.fmoMode                    = m_stEncoderInput.enableFMO;
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.outputAUD                = m_stEncoderInput.aud_enable;
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.idrPeriod                = m_stInitEncParams.encodeConfig->gopLength ;
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.level                    = m_stEncoderInput.level;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.tier                     = m_stEncoderInput.tier;
+
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.enableLTR                = m_stEncoderInput.enableLTR;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.ltrNumFrames             = m_stEncoderInput.ltrNumFrames;
+
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.minCUSize                = m_stEncoderInput.minCUsize;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.maxCUSize                = m_stEncoderInput.maxCUsize;
+		//        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.numTemporalLayers        = m_stEncoderInput.numlayers;
 /*
 		if (m_stEncoderInput.svcTemporal)
         {
-            m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.enableTemporalSVC = 1;
-            m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.h264Extension.svcTemporalConfig.basePriorityID           = 0;
-            m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.h264Extension.svcTemporalConfig.numTemporalLayers = m_stEncoderInput.numlayers;;
+            m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.enableTemporalSVC = 1;
+            m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.h264Extension.svcTemporalConfig.basePriorityID           = 0;
+            m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.h264Extension.svcTemporalConfig.numTemporalLayers = m_stEncoderInput.numlayers;;
         }
 */
 
@@ -321,90 +325,85 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 		// Don't need to specify 'separate color planes'
 		switch (m_stEncoderInput.chromaFormatIDC) {
 			case cudaVideoChromaFormat_444:
-				m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.chromaFormatIDC = 3; // YUV444
+				//m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.chromaFormatIDC = 3; // YUV444
 				break;
 
 			default: // cudaVideoChromaFormat_420:
-				m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.chromaFormatIDC = 1; // YUV420
+				//m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.chromaFormatIDC = 1; // YUV420
 				break;
 		}
 
-#define ADD_ENCODECONFIGH264_2_OSS2(var,name) \
-	oss << " / " << name << "=" << std::dec << (unsigned) m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config. ## var
-#define ADD_ENCODECONFIGH264_2_OSS( var ) ADD_ENCODECONFIGH264_2_OSS2(var,#var)
+#define ADD_ENCODECONFIGH265_2_OSS2(var,name) \
+	oss << " / " << name << "=" << std::dec << (unsigned) m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig. ## var
+#define ADD_ENCODECONFIGH265_2_OSS( var ) ADD_ENCODECONFIGH265_2_OSS2(var,#var)
 
-#define ADD_ENCODECONFIGH264_2_OSS2_if_nz(var,name) \
-	if ( m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config. ## var ) \
-		oss << " / " << name << "=" << std::dec << (unsigned) m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config. ## var
-#define ADD_ENCODECONFIGH264_2_OSS_if_nz(var,name) ADD_ENCODECONFIGH264_2_OSS2_if_nz(var,#var)
+#define ADD_ENCODECONFIGH265_2_OSS2_if_nz(var,name) \
+	if ( m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig. ## var ) \
+		oss << " / " << name << "=" << std::dec << (unsigned) m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig. ## var
+#define ADD_ENCODECONFIGH265_2_OSS_if_nz(var,name) ADD_ENCODECONFIGH265_2_OSS2_if_nz(var,#var)
 
-		desc_nv_enc_buffer_format_names.value2string(
-			m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.chromaFormatIDC, s
-		);
-		ADD_ENCODECONFIGH264_2_OSS2(chromaFormatIDC,"chroma");
 		//oss << "(" << s << ")"; // show ascii-name of the chromaFormatIDC
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(separateColourPlaneFlag,"sepCPF");
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(disableDeblockingFilterIDC,"disDF");
-		ADD_ENCODECONFIGH264_2_OSS2(adaptiveTransformMode,"adaTM");
-		ADD_ENCODECONFIGH264_2_OSS_if_nz(fmoMode);
-		ADD_ENCODECONFIGH264_2_OSS(bdirectMode);
-		ADD_ENCODECONFIGH264_2_OSS_if_nz(outputAUD);
-		//ADD_ENCODECONFIGH264_2_OSS(entropyCodingMode);
-		ADD_ENCODECONFIGH264_2_OSS(idrPeriod);
-		ADD_ENCODECONFIGH264_2_OSS(level);
-		//ADD_ENCODECONFIGH264_2_OSS(numTemporalLayers);
+		//ADD_ENCODECONFIGH265_2_OSS2_if_nz(separateColourPlaneFlag,"sepCPF");
+		ADD_ENCODECONFIGH265_2_OSS2_if_nz(disableDeblockAcrossSliceBoundary, "disDe");
+		//ADD_ENCODECONFIGH265_2_OSS2(adaptiveTransformMode,"adaTM");
+		//ADD_ENCODECONFIGH265_2_OSS(bdirectMode);
+		ADD_ENCODECONFIGH265_2_OSS_if_nz(outputAUD);
+		ADD_ENCODECONFIGH265_2_OSS(idrPeriod);
+		ADD_ENCODECONFIGH265_2_OSS(level);
+		ADD_ENCODECONFIGH265_2_OSS(tier);
 
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.outputBufferingPeriodSEI = m_stEncoderInput.output_sei_BufferPeriod;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.outputPictureTimingSEI   = m_stEncoderInput.output_sei_PictureTime;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.hierarchicalPFrames      = !! m_stEncoderInput.hierarchicalP;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.hierarchicalBFrames      = !! m_stEncoderInput.hierarchicalB;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.disableSPSPPS            = !! m_stEncoderInput.outBandSPSPPS;
-//        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.outputFramePackingSEI    = m_stEncoderInput.stereo3dMode!= NV_ENC_STEREO_PACKING_MODE_NONE ? 1 : 0;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.outputFramePackingSEI    = m_stEncoderInput.stereo3dEnable ? 1 : 0;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.stereoMode               = (NV_ENC_STEREO_PACKING_MODE)m_stEncoderInput.stereo3dMode;
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.enableStereoMVC          = m_stEncoderInput.stereo3dEnable;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.separateColourPlaneFlag  = m_stEncoderInput.separateColourPlaneFlag;// set to 1 to enable 4:4:4 mode
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.entropyCodingMode        = (m_stEncoderInput.profile > NV_ENC_H264_PROFILE_BASELINE) ? m_stEncoderInput.vle_entropy_mode : NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC;
-        if (m_stEncoderInput.max_ref_frames>0) 
-             m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.maxNumRefFrames     = m_stEncoderInput.max_ref_frames;
-        if ( pvui != NULL )
-            m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.h264VUIParameters = *pvui;
-
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(outputBufferingPeriodSEI,"outBPSEI");
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(outputPictureTimingSEI,"outPTSEI");
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(hierarchicalPFrames,"hierP");
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(hierarchicalBFrames,"hierB");
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(disableSPSPPS,"disSPSPPS");
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(outputFramePackingSEI,"outFPSEI");
-//		ADD_ENCODECONFIGH264_2_OSS2_if_nz(enableStereoMVC,"enableStereo");
-//		if ( m_stEncoderInput.stereo3dEnable )
-//			ADD_ENCODECONFIGH264_2_OSS2(stereoMode,"stereoMode");
-		ADD_ENCODECONFIGH264_2_OSS2(entropyCodingMode,"entCM");
-		ADD_ENCODECONFIGH264_2_OSS2(maxNumRefFrames,"maxRef");
 		if (m_stEncoderInput.enableLTR) {
-			ADD_ENCODECONFIGH264_2_OSS2(ltrNumFrames, "ltrnf");
-			ADD_ENCODECONFIGH264_2_OSS2_if_nz(ltrTrustMode, "ltrtm");
+			ADD_ENCODECONFIGH265_2_OSS2(ltrNumFrames,"ltrnf");
 		}
+		//ADD_ENCODECONFIGH265_2_OSS(numTemporalLayers);
 
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.sliceMode = m_stEncoderInput.sliceMode;
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.sliceModeData = m_stEncoderInput.sliceModeData;
-		ADD_ENCODECONFIGH264_2_OSS2(sliceMode, "SM");
-		ADD_ENCODECONFIGH264_2_OSS2(sliceModeData, "SMData");
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.outputBufferingPeriodSEI = m_stEncoderInput.output_sei_BufferPeriod;
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.outputPictureTimingSEI   = m_stEncoderInput.output_sei_PictureTime;
+        //m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.hierarchicalPFrames      = !! m_stEncoderInput.hierarchicalP;
+        //m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.hierarchicalBFrames      = !! m_stEncoderInput.hierarchicalB;
+        m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.disableSPSPPS            = !! m_stEncoderInput.outBandSPSPPS;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.repeatSPSPPS             = 1; /**< [in]: Set 1 to output VPS,SPS and PPS for every IDR frame.*/
+        //m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.outputFramePackingSEI    = m_stEncoderInput.stereo3dEnable ? 1 : 0;
+        //m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.separateColourPlaneFlag  = m_stEncoderInput.separateColourPlaneFlag;// set to 1 to enable 4:4:4 mode
+        if (m_stEncoderInput.max_ref_frames>0) 
+			m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.maxNumRefFramesInDPB = m_stEncoderInput.max_ref_frames;
 
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.enableLTR    = m_stEncoderInput.enableLTR;
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.ltrNumFrames = m_stEncoderInput.ltrNumFrames;
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.ltrTrustMode = m_stEncoderInput.ltrTrustMode;
+		//m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.ltrNumFrames = (m_stEncoderInput.max_ref_frames < 6) ?
+		//	(6 - m_stEncoderInput.max_ref_frames) :
+		//	0;
+
+//        if ( pvui != NULL )
+//            m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.h264VUIParameters = *pvui;
+
+		ADD_ENCODECONFIGH265_2_OSS2_if_nz(outputBufferingPeriodSEI,"outBPSEI");
+		ADD_ENCODECONFIGH265_2_OSS2_if_nz(outputPictureTimingSEI,"outPTSEI");
+		//ADD_ENCODECONFIGH265_2_OSS2_if_nz(hierarchicalPFrames,"hierP");
+		//ADD_ENCODECONFIGH265_2_OSS2_if_nz(hierarchicalBFrames,"hierB");
+		ADD_ENCODECONFIGH265_2_OSS2_if_nz(disableSPSPPS,"disSPSPPS");
+		//ADD_ENCODECONFIGH265_2_OSS2_if_nz(outputFramePackingSEI,"outFPSEI");
+		ADD_ENCODECONFIGH265_2_OSS2(maxNumRefFramesInDPB, "maxRef");
 
 		// NVENC API 3
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.enableVFR = m_stEncoderInput.enableVFR ? 1 : 0;
+		//m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.enableVFR = m_stEncoderInput.enableVFR ? 1 : 0;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.sliceMode      = m_stEncoderInput.sliceMode;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.sliceModeData  = m_stEncoderInput.sliceModeData;
+		ADD_ENCODECONFIGH265_2_OSS2(sliceMode, "SM");
+		ADD_ENCODECONFIGH265_2_OSS2(sliceModeData, "SMData");
 
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(enableVFR,"enaVFR");
-
+		//ADD_ENCODECONFIGH265_2_OSS2_if_nz(enableVFR,"enaVFR");
 
 		// NVENC API 4
-		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.qpPrimeYZeroTransformBypassFlag = m_stEncoderInput.qpPrimeYZeroTransformBypassFlag;
-		ADD_ENCODECONFIGH264_2_OSS2_if_nz(qpPrimeYZeroTransformBypassFlag,"qpPrimeYZero");
-    }
+		//m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.qpPrimeYZeroTransformBypassFlag = m_stEncoderInput.qpPrimeYZeroTransformBypassFlag;
+		//ADD_ENCODECONFIGH265_2_OSS2_if_nz(qpPrimeYZeroTransformBypassFlag,"qpPrimeYZero");
+
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.vpsId = 0;/**< [in]: Specifies the VPS id of the video parameter set. Currently reserved and must be set to 0. */
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.spsId = 0;/**< [in]: Specifies the SPS id of the sequence header. Currently reserved and must be set to 0. */
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.ppsId = 0;/**< [in]: Specifies the PPS id of the picture header. Currently reserved and must be set to 0. */
+
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.tier      = m_stEncoderInput.tier;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.minCUSize = m_stEncoderInput.minCUsize;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.maxCUSize = m_stEncoderInput.maxCUsize;
+	}
 
     // Initialize the Encoder
     nvStatus = m_pEncodeAPI->nvEncInitializeEncoder(m_hEncoder, &m_stInitEncParams);
@@ -502,7 +501,7 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 }
 
 HRESULT
-CNvEncoderH264::ReconfigureEncoder(EncodeConfig EncoderReConfig)
+CNvEncoderH265::ReconfigureEncoder(EncodeConfig EncoderReConfig)
 {
     // Initialize the Encoder
     memcpy(&m_stEncoderInput ,&EncoderReConfig, sizeof(EncoderReConfig));
@@ -519,7 +518,7 @@ CNvEncoderH264::ReconfigureEncoder(EncodeConfig EncoderReConfig)
     m_stInitEncParams.encodeConfig->frameFieldMode              = EncoderReConfig.FieldEncoding ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD : NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME ;
     m_stInitEncParams.encodeConfig->rcParams.vbvBufferSize      = EncoderReConfig.vbvBufferSize;
     m_stInitEncParams.encodeConfig->rcParams.vbvInitialDelay    = EncoderReConfig.vbvInitialDelay;
-    m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.disableSPSPPS = 0;
+    m_stInitEncParams.encodeConfig->encodeCodecConfig.hevcConfig.disableSPSPPS = 0;
     memcpy( &m_stReInitEncParams.reInitEncodeParams, &m_stInitEncParams, sizeof(m_stInitEncParams));
     SET_VER(m_stReInitEncParams, NV_ENC_RECONFIGURE_PARAMS);
     m_stReInitEncParams.resetEncoder    = true;
@@ -530,7 +529,7 @@ CNvEncoderH264::ReconfigureEncoder(EncodeConfig EncoderReConfig)
 //
 // neither nvenc_export nor nvEncode2 uses the vanilla EncodeFrame() function
 //
-//HRESULT CNvEncoderH264::EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush)
+//HRESULT CNvEncoderH265::EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush)
 
 //
 //  EncodeFramePPro() - called by the Premiere Pro Plugin 
@@ -539,7 +538,7 @@ CNvEncoderH264::ReconfigureEncoder(EncodeConfig EncoderReConfig)
 //         (1) YV12(4:2:0) planar-format            - encoder chromaFormat must be 4:2:0
 //         (2) YUY2(4:2:2) packed (16bpp per pixel) - encoder chromaFormat must be 4:2:0
 //         (3) YUV444 packed (32bpp per pixel)      - encoder chromaFormat must be 4:4:4
-HRESULT CNvEncoderH264::EncodeFramePPro(
+HRESULT CNvEncoderH265::EncodeFramePPro(
 	EncodeFrameConfig *pEncodeFrame,
 	const bool bFlush
 )
@@ -566,6 +565,7 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
 	const bool input_yuv420 = pEncodeFrame->ppro_pixelformat_is_yuv420;
 	const bool input_yuv444 = pEncodeFrame->ppro_pixelformat_is_yuv444;
 
+
     EncodeInputSurfaceInfo  *pInput;
     EncodeOutputBuffer      *pOutputBitstream;
 
@@ -573,6 +573,7 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
     {
         assert(0);
     }
+
 
     if (!m_stOutputSurfQueue.Remove(pOutputBitstream, INFINITE))
     {
@@ -757,24 +758,33 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
     m_stEncodePicParams.inputTimeStamp = 0;
     m_stEncodePicParams.inputDuration = 0;
 
-	// embed encoder-settings (text-string) into the encoded videostream
+	// For H264-only: embed encoder-settings (text-string) into the encoded videostream
+	if (compareGUIDs( m_stEncodeGUID, NV_ENC_CODEC_H264_GUID)) {
+		if (!m_stInitEncParams.enablePTD)
+		{
+	        m_stEncodePicParams.codecPicParams.h264PicParams.refPicFlag = 1;
+			//m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
+			m_stEncodePicParams.codecPicParams.h264PicParams.displayPOCSyntax = 2*m_dwFrameNumInGOP;
+		}
+
+		// embed encoder-settings (text-string) into the encoded videostream
+		if (m_sei_user_payload_str.length()) { // m_sei_user_payload.payloadSize ) {
+			m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArrayCnt = 1;
+			m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArray = &m_sei_user_payload;
+
+			// Delete the payload.  This way, our user-sei is only embedded into the *first* frame
+			// of the output-bitstream, and nothing subsequent.  While we really should mebed
+			// it in every frame, that would bloat the output filesize, and MediaInfo only
+			// needs the user-sei in the first-frame to display the info. 
+			m_sei_user_payload_str.clear();
+		}
+	} // H264
+
 	if (!m_stInitEncParams.enablePTD)
 	{
-        m_stEncodePicParams.codecPicParams.h264PicParams.refPicFlag = 1;
-		//m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
-		m_stEncodePicParams.codecPicParams.h264PicParams.displayPOCSyntax = 2*m_dwFrameNumInGOP;
-	}
-
-	// embed encoder-settings (text-string) into the encoded videostream
-	if (m_sei_user_payload_str.length()) { // m_sei_user_payload.payloadSize ) {
-		m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArrayCnt = 1;
-		m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArray = &m_sei_user_payload;
-
-		// Delete the payload.  This way, our user-sei is only embedded into the *first* frame
-		// of the output-bitstream, and nothing subsequent.  While we really should mebed
-		// it in every frame, that would bloat the output filesize, and MediaInfo only
-		// needs the user-sei in the first-frame to display the info. 
-		m_sei_user_payload_str.clear();
+		m_stEncodePicParams.codecPicParams.hevcPicParams.refPicFlag = 1;
+		//m_stEncodePicParams.codecPicParams.hevcPicParams.frameNumSyntax = m_dwFrameNumInGOP;
+		m_stEncodePicParams.codecPicParams.hevcPicParams.displayPOCSyntax = 2 * m_dwFrameNumInGOP;
 	}
 
 	if (!m_stInitEncParams.enablePTD)
@@ -844,7 +854,7 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
 //
 // nvEncode2 (the command-line transcoder) calls EncodeCudaMemFrame() function
 //
-HRESULT CNvEncoderH264::EncodeCudaMemFrame(
+HRESULT CNvEncoderH265::EncodeCudaMemFrame(
 	EncodeFrameConfig *pEncodeFrame, CUdeviceptr oDecodedFrame[3], const unsigned int oFrame_pitch, bool bFlush )
 {
     NVENCSTATUS nvStatus = NV_ENC_SUCCESS;
@@ -926,7 +936,7 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(
 				cuda_memcpy2d.srcY = 0;
 				cuda_memcpy2d.WidthInBytes = oFrame_pitch;
 
-				printf("\nCNvEncoderH264::EncodeCudaMemFrame(): cuMemcpy2D(src_pitch=%0u -> dst_pitch=%0u)\n",
+				printf("\nCNvEncoderH265::EncodeCudaMemFrame(): cuMemcpy2D(src_pitch=%0u -> dst_pitch=%0u)\n",
 					oFrame_pitch, cuda_memcpy2d.dstPitch
 				);
 				result = cuMemcpy2D(&cuda_memcpy2d);
@@ -958,7 +968,7 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(
     }
     else // here we just pass the frame in system memory to NVENC
     {
-        printf("CNvEncoderH264::EncodeCudaMemFrame ERROR !useMappedResources\n");
+        printf("CNvEncoderH265::EncodeCudaMemFrame ERROR !useMappedResources\n");
         UnlockInputBuffer(pInput->hInputSurface);
     }
 
@@ -988,22 +998,24 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(
     m_stEncodePicParams.inputDuration = 0;
 
 	// For H264-only: embed encoder-settings (text-string) into the encoded videostream
-	if (m_sei_user_payload_str.length()) { // m_sei_user_payload.payloadSize ) {
-		m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArrayCnt = 1;
-		m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArray = &m_sei_user_payload;
+	if (m_stEncodeGUID == NV_ENC_CODEC_H264_GUID) {
+		if (m_sei_user_payload_str.length()) { // m_sei_user_payload.payloadSize ) {
+			m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArrayCnt = 1;
+			m_stEncodePicParams.codecPicParams.h264PicParams.seiPayloadArray = &m_sei_user_payload;
 
-		// Delete the payload.  This way, our user-sei is only embedded into the *first* frame
-		// of the output-bitstream, and nothing subsequent.  While we really should mebed
-		// it in every frame, that would bloat the output filesize, and MediaInfo only
-		// needs the user-sei in the first-frame to display the info. 
-		m_sei_user_payload_str.clear();
-	} // sei
+			// Delete the payload.  This way, our user-sei is only embedded into the *first* frame
+			// of the output-bitstream, and nothing subsequent.  While we really should embed
+			// it in every frame, that would bloat the output filesize, and MediaInfo only
+			// needs the user-sei in the first-frame to display the info. 
+			m_sei_user_payload_str.clear();
+		} // sei
+    } // H264
 
 	if (!m_stInitEncParams.enablePTD)
 	{
-		m_stEncodePicParams.codecPicParams.h264PicParams.refPicFlag = 1;
-		//m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
-		m_stEncodePicParams.codecPicParams.h264PicParams.displayPOCSyntax = 2 * m_dwFrameNumInGOP;
+		m_stEncodePicParams.codecPicParams.hevcPicParams.refPicFlag = 1;
+		//m_stEncodePicParams.codecPicParams.hevcPicParams.frameNumSyntax = m_dwFrameNumInGOP;
+		m_stEncodePicParams.codecPicParams.hevcPicParams.displayPOCSyntax = 2 * m_dwFrameNumInGOP;
 	}
 
 	if (!m_stInitEncParams.enablePTD)
@@ -1085,7 +1097,7 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(
     return hr;
 }
 
-HRESULT CNvEncoderH264::DestroyEncoder()
+HRESULT CNvEncoderH265::DestroyEncoder()
 {
     HRESULT hr = S_OK;
     // common

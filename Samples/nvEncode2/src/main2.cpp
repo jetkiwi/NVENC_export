@@ -23,6 +23,7 @@
 
 #include <nvEncodeAPI.h>                // the NVENC common API header
 #include "CNVEncoderH264.h"             // class definition for the H.264 encoding class
+#include "CNVEncoderH265.h"             // class definition for the HEVC encoding class
 #include "xcodeutil.h"                  // class helper functions for video encoding
 #include <platform/NvTypes.h>           // type definitions
 #include "defines.h"                    // common headers and definitions
@@ -43,7 +44,7 @@
 
 #pragma warning (disable:4189)
 
-#define FRAME_QUEUE 60     // Maximum of 60 frames that we will use as an array to buffering frames
+#define FRAME_QUEUE 32 // Use a maximum of 16 frames to buffer the decoder
 
 const char *sAppName = "nvEncoder";
 
@@ -78,6 +79,105 @@ fwrite_callback(_In_count_x_(_Size*_Count) void * _Str, size_t _Size, size_t _Co
 	return fwrite(_Str, _Size, _Count, _File );
 }
 
+
+// MsgProc() - The window's message handler
+// This function is passed to the create
+static LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+        case WM_KEYDOWN:
+            switch (wParam)
+            {
+                    // use ESC to quit application
+                case VK_ESCAPE:
+                    {
+                        //g_bDone = true;
+                        PostQuitMessage(0);
+                        return 0;
+                    }
+                    break;
+
+                    // use space to pause playback
+                case VK_SPACE:
+                    {
+                        //g_bRunning = !g_bRunning;
+                    }
+                    break;
+            }
+
+            break;
+			/*
+            // resize the window
+            // even though we disable resizing (see next event handler below)
+            // we need to be able to handle this event properly because the
+            // windowing system calls it.
+        case WM_SIZE:
+            {
+                // store new window size in our globals.
+                g_nClientAreaWidth  = GET_X_LPARAM(lParam);
+                g_nClientAreaHeight = GET_Y_LPARAM(lParam);
+
+                D3DVIEWPORT9 oViewport;
+                oViewport.X = 0;
+                oViewport.Y = 0;
+                oViewport.Width  = g_nClientAreaWidth;
+                oViewport.Height = g_nClientAreaHeight;
+                oViewport.MaxZ = 1.0f;
+                oViewport.MinZ = 0.0f;
+
+                g_pD3DDevice->SetViewport(&oViewport);
+
+                D3DMATRIX oViewMatrix = {1.0f, 0.0f, 0.0f, 0.0f,
+                                         0.0f, 1.0f, 0.0f, 0.0f,
+                                         0.0f, 0.0f, 1.0f, 0.0f,
+                                         0.0f, 0.0f, 0.0f, 1.0f
+                                        };
+                // scale viewport to be of window width and height
+                oViewMatrix._11 = 2.0f/g_nClientAreaWidth;
+                oViewMatrix._22 = 2.0f/g_nClientAreaHeight;
+                // translate viewport so that lower left corner represents
+                // (0, 0) and upper right corner is (width, height)
+                oViewMatrix._41 = -1.0f - 1.0f / g_nClientAreaWidth;
+                oViewMatrix._42 = -1.0f + 1.0f / g_nClientAreaHeight;
+
+                if (0 != g_pD3DDevice)
+                {
+                    g_pD3DDevice->SetTransform(D3DTS_VIEW, &oViewMatrix);
+                }
+
+                renderVideoFrame(hWnd, g_bUseInterop);
+
+                return 0;   // Jump Back
+            }
+
+            // disallow resizing.
+        case WM_GETMINMAXINFO:
+            {
+                MINMAXINFO *pMinMaxInfo = reinterpret_cast<MINMAXINFO *>(lParam);
+
+                pMinMaxInfo->ptMinTrackSize.x = g_nWindowWidth;
+                pMinMaxInfo->ptMinTrackSize.y = g_nWindowHeight;
+
+                pMinMaxInfo->ptMaxTrackSize.x = g_nWindowWidth;
+                pMinMaxInfo->ptMaxTrackSize.y = g_nWindowHeight;
+
+                return 0;
+            }
+			*/
+        case WM_DESTROY:
+            //g_bDone = true;
+            PostQuitMessage(0);
+            return 0;
+
+        case WM_PAINT:
+            ValidateRect(hWnd, NULL);
+            return 0;
+    }
+
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
 void queryAllEncoderCaps(CNvEncoder *pEncoder, string &s)
 {
 	ostringstream os;
@@ -110,7 +210,7 @@ void queryAllEncoderCaps(CNvEncoder *pEncoder, string &s)
         QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_BDIRECT_MODE);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_CABAC);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_ADAPTIVE_TRANSFORM);
-        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_STEREO_MVC);
+//      QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_STEREO_MVC);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_NUM_MAX_TEMPORAL_LAYERS);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_HIERARCHICAL_PFRAMES);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_HIERARCHICAL_BFRAMES);
@@ -209,7 +309,7 @@ int main(const int argc, char *argv[])
     int          filename_length  = 0;
     bool useall_gpus              = false;// if true, use ALL detected GPUs
 	unsigned int use_gpuid        = 0;// The GPUID# to use (if multiple GPUs are installed, only 1 will be used)
-    unsigned char *yuv[3];
+	unsigned char *yuv[3] = {NULL, NULL, NULL};
 
     HANDLE hInput;
 
@@ -248,6 +348,44 @@ int main(const int argc, char *argv[])
     nvEncoderConfig[0].frameRateNum = inCuvideoformat[0].frame_rate.numerator;
     nvEncoderConfig[0].FieldEncoding = inCuvideoformat[0].progressive_sequence ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME : NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
 
+	///////////////////////////////////////////////////////////
+	//
+	// create window hWnd (after we know the size of the input file size)
+	//
+	// In the original NVCUVID sample project, 'hWnd' was the on-screen output 
+	// window for the decoded video.  Here, we don't output to a window.
+	// Instead we use hWnd for a totally different reason; it's a required argument
+	// for IDirect3D9::CreateDevice().
+    WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, MsgProc, 0L, 0L,
+                      GetModuleHandle(NULL), NULL, NULL, NULL, NULL,
+                      sAppName, NULL
+                    };
+    RegisterClassEx(&wc);
+
+    // figure out the window size we must create to get a *client* area
+    // that is of the size requested by m_dimensions.
+    RECT adjustedWindowSize;
+    DWORD dwWindowStyle;
+    HWND hWnd = NULL;
+
+    {   // create a dummy window for the direct3d9 interop-object we'll create later.
+        dwWindowStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+        SetRect(&adjustedWindowSize, 0, 0, inCuvideoformat[0].coded_width, inCuvideoformat[0].coded_height);
+        AdjustWindowRect(&adjustedWindowSize, dwWindowStyle, false);
+
+        LONG g_nWindowWidth  = adjustedWindowSize.right  - adjustedWindowSize.left;
+        LONG g_nWindowHeight = adjustedWindowSize.bottom - adjustedWindowSize.top;
+
+        // Create the application's window
+        hWnd = CreateWindow(wc.lpszClassName, sAppName,
+                            dwWindowStyle,
+                            0, 0,
+                            g_nWindowWidth,
+                            g_nWindowHeight,
+                            NULL, NULL, wc.hInstance, NULL);
+    }
+
+
     // Parse the command line parameters for the application and NVENC
 	// This step allows some of the above settings (like aspect ratio) to be overriden from the command-line
 	pprintf("calling parseCmdLineArguments()\n");
@@ -257,8 +395,7 @@ int main(const int argc, char *argv[])
 	switch( inCuvideoformat[0].chroma_format ) {
 	case cudaVideoChromaFormat_Monochrome: // 4:2:0 (any of the following: base/main/high/high422/high444/high444p)
 	case cudaVideoChromaFormat_420:  // 4:2:0 (any of the following: base/main/high/high422/high444/high444p)
-		// don't override the default-value set by utilities.cpp
-		//nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_TILED64x16;// 4:2:0
+		nvEncoderConfig[0].chromaFormatIDC = cudaVideoChromaFormat_420;// 4:2:0
 		break;
 
 	case cudaVideoChromaFormat_422:  // 4:2:2 (High422/High444/High444p)
@@ -267,7 +404,7 @@ int main(const int argc, char *argv[])
 		break;
 
 	case cudaVideoChromaFormat_444:  // 4:4:4 (High444/High444p)
-		nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16;// 4:4:4
+		nvEncoderConfig[0].chromaFormatIDC = cudaVideoChromaFormat_444;// 4:4:4
 		if ( nvEncoderConfig[0].profile < NV_ENC_H264_PROFILE_HIGH_444 ) {
 			pprintf("FIXUP: forcing nvEncoderConfig[0].profile = NV_ENC_H264_PROFILE_HIGH_444\n");
 			nvEncoderConfig[0].profile = NV_ENC_H264_PROFILE_HIGH_444;
@@ -277,9 +414,6 @@ int main(const int argc, char *argv[])
 		pprintf("input-videofile: ERROR, unknown chroma_format: %0u!\n", inCuvideoformat[0].chroma_format);
 		exit(EXIT_FAILURE);
 	} // switch( inCuvideoformat[0].chroma_format ) 
-
-	// temp kludge
-	//nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16;// 4:4:4
 
     // Show a summary of all the parameters for GPU 0
 	pprintf("calling displayEncodingParams()\n");
@@ -336,14 +470,14 @@ int main(const int argc, char *argv[])
 	//  command-line argument "-gpuid=<x>" chooses one gpuID.
 
 	use_gpuid = 0; // default GPUID (if none specified on command-line)
-	getCmdLineArgumentValue ( argc, (const char **)argv, "use_gpuid", &use_gpuid );
+	getCmdLineArgumentValue ( argc, (const char **)argv, "device", &use_gpuid );
 	encoder_disable_mask[use_gpuid] = false; // turn on the user-selected GPU
 
 	// optional, turn on ALL gpus
-	useall_gpus = checkCmdLineFlag ( argc, (const char **)argv, "useall_gpus");
-	if ( useall_gpus )
-		for(unsigned i = 0; i < encoder_disable_mask.size(); ++i )
-			encoder_disable_mask[i] = false;
+//	useall_gpus = checkCmdLineFlag ( argc, (const char **)argv, "useall_gpus");
+//	if ( useall_gpus )
+//		for(unsigned i = 0; i < encoder_disable_mask.size(); ++i )
+//			encoder_disable_mask[i] = false;
 
 
 	pprintf("Checkpoint 2: numEncoders=%0u\n", numEncoders);
@@ -420,23 +554,93 @@ int main(const int argc, char *argv[])
         vui.transferCharacteristics = inCuvideoformat[0].video_signal_description.transfer_characteristics;
     }
 
+	///////////////////////////////////////////////////////////////////////////
+	// Using the default creation-flag (cudaVideoCreate_PreferCUVID) appears to 
+	// have problems with some types of video-bitstreams:
+	//
+	// (1) all HEVC bitstreams (Kepler/Maxwell GPUs, which rely on 'hybrid' decoder)
+	//     (can't even create the decoder object)
+	// (2) some H264 bitstreams (usually 4k-resolution with high# ref. frames)
+	//     (decoder object is created, but fails on first frame with the error
+	//      'not enough resources')
+	//
+	// To workaround this problem, we use the D3D9 interoperability mode.  In this
+	// mode, we create our CUDA-context with its associated ID3D9Device handle.
+	// This requires that the NVidia GPU is an enumerated D3D9 device (i.e. it
+	// must be physically attached to a display, it cannot be running in
+	// 'headless' mode.)
+	//
+	// The interop-mode enables us to use the 'DXVA' creation-flag, which 
+	// seems to handle the aforementioned problematic bitstreams without
+	// trouble.
+
     // Create the H.264 Encoder instances
     for (unsigned int encoderID=0; encoderID < numEncoders; encoderID++) 
     {
 		// mask-control: use encoderID# only if it is not disabled
 		if ( encoder_disable_mask[encoderID] ) continue; // it's masked, don't use it
 
+		////////////////
+		// create a D3D9 interoperabilty context (even if we don't need it later)
+		// 
+		//  Note: the NVidia GPU *must* be attached to a display
+		//        (i.e. it cannot be running in a 'headless' config.)
+		//
+		// Since we don't know if we're actually going to use interop-mode, it's ok
+		// if initD3D9() fails. 
+		CUdevice device = 0;
+		int bTCC;
+		const bool interop_available = pVideoDecode[encoderID]->initD3D9(
+			hWnd, // only used to create a IDirect3D9 device
+			nvEncoderConfig[encoderID].maxWidth,
+			nvEncoderConfig[encoderID].maxHeight,
+			&bTCC
+		);
+			
+//		if (pVideoDecode[encoderID]->initCudaResources(true , 0, &device, NULL) == E_FAIL)
+		const bool useinterop = (inCuvideoformat[0].codec == cudaVideoCodec_HEVC) ?
+			true:   // On Kepler/Maxwell GPUs, HEVC requires interop-mode
+			interop_available;  // don't need interop, use it only if available
+
+		if (pVideoDecode[encoderID]->initCudaResources(useinterop, 0, NULL, NULL) == E_FAIL)
+		{
+//        m_bAutoQuit  = true;
+//        m_bException = true;
+//        m_bWaived    = true;
+	        my_printf("pVideoDecode[0]: Unable to initCudaResources!\n");
+			pVideoDecode[encoderID]->cleanup(true);
+			exit(EXIT_FAILURE);
+		}
+		CUcontext cudaContext = pVideoDecode[encoderID]->GetCudaContext();
+
         // Create H.264 based encoder
-        pEncoder[encoderID] = new CNvEncoderH264();
+		switch (nvEncoderConfig[0].codec) {
+
+			case NV_ENC_H264: 
+				pEncoder[encoderID] = new CNvEncoderH264();
+				break;
+
+			case NV_ENC_H265:
+				pEncoder[encoderID] = new CNvEncoderH265();
+				break;
+					
+			default:
+				printf("main2(): ERROR, unknown codec(%0d)\n", nvEncoderConfig[0].codec);
+				exit(EXIT_FAILURE);
+		} // switch
+        
 		pEncoder[encoderID]->Register_fwrite_callback(fwrite_callback);
+
+		// Configure the encoder to use the videoDecoder's cuda-context.
+		pEncoder[encoderID]->UseExternalCudaContext(cudaContext, encoderInfo[encoderID].device);
 
         // Section 2.1 (Opening an Encode Session on nDeviceID)
         pEncoder[encoderID]->OpenEncodeSession( nvEncoderConfig[encoderID], encoderInfo[encoderID].device, nvencstatus );
 
 //        if ( S_OK != pEncoder[encoderID]->InitializeEncoder() )
-        if ( S_OK != pEncoder[encoderID]->InitializeEncoderH264( &vui ) )
+        if ( S_OK != pEncoder[encoderID]->InitializeEncoderCodec( (void *)&vui ) )
         {
-            printf("\nnvEncoder Error InitializeEncoderH264(): NVENC H.264 encoder initialization failure! Check input params!\n");
+            printf("\nnvEncoder Error InitializeEncoderCodec(): encoder initialization failure! Check input params!\n");
             return 1;
         }
 
@@ -453,25 +657,6 @@ int main(const int argc, char *argv[])
         sdkCreateTimer(&timer[encoderID]);
         sdkResetTimer (&timer[encoderID]);  
 
-	    // Prepare the CudaVideo decoder(s) for frame output
-	    //    Initialize CUDA/D3D9 context and other video memory resources
-	    //
-	    //   Normally, pVideoDecode will create its own CudaContext, but this would prevent it from directly passing
-		//   frames to the Encoder object (which also has its own CudaContext.)
-		//
-		//   Since pEncoder objects are created first, we pass the pEncoder's CudaContext into each
-		//   pVideoDecode[i] object.  This enables them to see each other's framebuffer(s).
-		CUdevice device = 0;
-		if (pVideoDecode[encoderID]->initCudaResources(false /*decoder->m_bUseInterop*/, 0, &device, &pEncoder[encoderID]->m_cuContext) == E_FAIL)
-		{
-//        m_bAutoQuit  = true;
-//        m_bException = true;
-//        m_bWaived    = true;
-	        my_printf("pVideoDecode[0]: Unable to initCudaResources!\n");
-			pVideoDecode[encoderID]->cleanup(true);
-			exit(EXIT_FAILURE);
-		}
-
 		pVideoDecode[encoderID]->Start();
     } // for ( encoderID
 
@@ -480,6 +665,7 @@ int main(const int argc, char *argv[])
     unsigned int picHeight ;
     int lumaPlaneSize      ;
     int chromaPlaneSize    ;
+	unsigned int oDecodedFrame_pitch;// #bytes per scanline
 
 	//
 	// Create picture buffers for the encoder
@@ -488,19 +674,21 @@ int main(const int argc, char *argv[])
                    nvEncoderConfig[0].height : (nvEncoderConfig[0].height >> 1);
     lumaPlaneSize = (nvEncoderConfig[0].width * nvEncoderConfig[0].height);
 
-	if ( IsYUV444Format( nvEncoderConfig[0].chromaFormatIDC ) )
-		chromaPlaneSize = lumaPlaneSize;// separate U,V planes: each is full size
-	else if ( IsNV12Format( nvEncoderConfig[0].chromaFormatIDC) )
-		chromaPlaneSize = lumaPlaneSize >> 1;// combined U,V plane: 1/4 + 1/4 = 1/2 size...
-	else if ( IsYV12Format( nvEncoderConfig[0].chromaFormatIDC) ) // separate U, V planes: each is 1/4 size
-		chromaPlaneSize = lumaPlaneSize >> 2;
+	if ( nvEncoderConfig[0].chromaFormatIDC == cudaVideoChromaFormat_444 )
+		chromaPlaneSize = lumaPlaneSize;// separate Y,U,V planes: each is full size
+	else 
+		chromaPlaneSize = lumaPlaneSize >> 1;// NV12 format: chromaplane is combined U+V (1/4 + 1/4 = 1/2)
 
+	/*
+    // In the original nvEncoderApp, video-frames were sourced from hostMemory.
+	// Since we are feeding the output of CUVID (Purevideo) decoder into NVENC,
+	// the frames are already allocated in GPU deviceMemory, so we completely
+	// bypass hostMemory. 
     yuv[0] = new unsigned char[FRAME_QUEUE * lumaPlaneSize  ];
     yuv[1] = new unsigned char[FRAME_QUEUE * chromaPlaneSize];
     yuv[2] = new unsigned char[FRAME_QUEUE * chromaPlaneSize];
 
 	// clear the buffers before starting (wow, takes way too long)
-	/*
 	for(int i = 0; i < FRAME_QUEUE; ++i ) {
 		memset( yuv[0], 0  , FRAME_QUEUE * lumaPlaneSize );
 		memset( yuv[1], 128, FRAME_QUEUE * chromaPlaneSize );
@@ -628,7 +816,13 @@ int main(const int argc, char *argv[])
 
 	        do {
 		        ++srcFrameNumber[encoderID];
-	            not_end_of_source = pVideoDecode[encoderID]->GetFrame(&got_source_frame, &oDecodedPicParams, &oDecodedDispInfo, oDecodedFrame);
+	            not_end_of_source = pVideoDecode[encoderID]->GetFrame(
+					&got_source_frame,
+					&oDecodedPicParams,
+					&oDecodedDispInfo,
+					oDecodedFrame,
+					&oDecodedFrame_pitch
+				);
 				// Once we are done with processing, must release the hw/mem resources that
 				// are held by the decoded-picture
 			} while ( not_end_of_source && !got_source_frame );
@@ -638,8 +832,9 @@ int main(const int argc, char *argv[])
 				bTopField = oDecodedDispInfo.top_field_first ? true : false;
 
 			if ( not_end_of_source && got_source_frame ) {
-                // [0] = luma
-				stEncodeFrame.yuv[0] = &yuv[0][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height];
+/*
+				// [0] = luma
+//				stEncodeFrame.yuv[0] = &yuv[0][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height];
                 stEncodeFrame.stride[0] = nvEncoderConfig[encoderID].width;
 
                 // [1] = chroma U
@@ -665,7 +860,7 @@ int main(const int argc, char *argv[])
 	                stEncodeFrame.stride[1] = nvEncoderConfig[encoderID].width/2;
 					stEncodeFrame.stride[2] = nvEncoderConfig[encoderID].width/2;
 				}
-
+*/
                 if (nvAppEncoderParams.mvc == 1)
                 {
                     stEncodeFrame.viewId = viewId;
@@ -713,6 +908,7 @@ int main(const int argc, char *argv[])
 					//if ( oDecodedDispInfo.repeat_first_field )
 				}
 
+/*
                 stEncodeFrame.yuv[0] = &yuv[0][ fbbase ];
 				if ( IsYUV444Format( nvEncoderConfig[0].chromaFormatIDC ) ) {
 					stEncodeFrame.yuv[1] = &yuv[1][ fbbase ];
@@ -726,9 +922,9 @@ int main(const int argc, char *argv[])
 					stEncodeFrame.yuv[1] = &yuv[1][ fbbase >> 2];
 					stEncodeFrame.yuv[2] = &yuv[2][ fbbase >> 2];
 				}
-
+*/
                 //pEncoder[encoderID]->EncodeFrame(&stEncodeFrame, false);
-                pEncoder[encoderID]->EncodeCudaMemFrame(&stEncodeFrame,oDecodedFrame,false);
+                pEncoder[encoderID]->EncodeCudaMemFrame(&stEncodeFrame,oDecodedFrame,oDecodedFrame_pitch,false);
 
                 // tell the Cuda video-decoder that the Decoded-Frames are no longer needed.
                 // (Frees them up to be re-used.)
@@ -749,7 +945,7 @@ int main(const int argc, char *argv[])
 //        {
             if ((!not_end_of_source) || (frameNumber == nvAppEncoderParams.numFramesToEncode-1))  {
                 printf("EncoderID[%d] - Last Encoded Frame flushed\n", encoderID);
-                pEncoder[encoderID]->EncodeFrame(NULL,true);
+				pEncoder[encoderID]->EncodeCudaMemFrame(NULL, oDecodedFrame, oDecodedFrame_pitch,true);// flush the encoder
             }
 
             sdkStopTimer(&timer[encoderID]);
@@ -777,6 +973,7 @@ int main(const int argc, char *argv[])
 			numFramesToEncode = nvAppEncoderParams.numFramesToEncode;
 
         pprintf("** EncoderID[%d] - Summary of Results **\n", encoderID);
+		pprintf("  NVCUVID decodedframe_pitch : %0u (#bytes per scanline)\n", oDecodedFrame_pitch);
         pprintf("  Frames Encoded     : %d\n", numFramesToEncode);
         pprintf("  Total Encode Time  : %6.2f (sec)\n", total_encode_time[encoderID] / 1000.0f );
         pprintf("  Average Time/Frame : %6.2f (ms)\n",  total_encode_time[encoderID] / numFramesToEncode );
