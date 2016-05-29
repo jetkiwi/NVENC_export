@@ -75,7 +75,7 @@ CNvEncoder::CNvEncoder() :
 #endif
 {
 	m_fwrite_callback        = NULL;
-    m_dwInputFormat          = NV_ENC_BUFFER_FORMAT_NV12_TILED64x16;
+    m_dwInputFormat          = NV_ENC_BUFFER_FORMAT_NV12;
     memset(&m_stInitEncParams,   0, sizeof(m_stInitEncParams));
     memset(&m_stEncoderInput,    0, sizeof(m_stEncoderInput));
     memset(&m_stInputSurface,    0, sizeof(m_stInputSurface));
@@ -479,12 +479,12 @@ HRESULT CNvEncoder::AllocateIOBuffers(unsigned int dwInputWidth, unsigned int dw
                 // (1) Allocate Cuda buffer. We will use this to hold the input YUV data.
 				unsigned row_count;
 				if ( m_stEncoderInput.chromaFormatIDC == cudaVideoChromaFormat_420 ) {
-					m_stInputSurface[i].bufferFmt = NV_ENC_BUFFER_FORMAT_NV12_PL;
+					m_stInputSurface[i].bufferFmt = NV_ENC_BUFFER_FORMAT_NV12;
 					row_count = dwInputHeight*3/2; // enough rows for NV12 frame
 				}
 				else {
 					// YUV 4:4:4
-					m_stInputSurface[i].bufferFmt      = NV_ENC_BUFFER_FORMAT_YUV444_PL;
+					m_stInputSurface[i].bufferFmt = NV_ENC_BUFFER_FORMAT_YUV444;
 					row_count = dwInputHeight*3; // enough rows for YUV444 frame
 				}
                 result = cuMemAllocPitch(&devPtrDevice, (size_t *)&m_stInputSurface[i].dwCuPitch, dwInputWidth, row_count, 16);
@@ -519,7 +519,7 @@ HRESULT CNvEncoder::AllocateIOBuffers(unsigned int dwInputWidth, unsigned int dw
                 }
                 
                 hr = m_pD3D9Device->CreateOffscreenPlainSurface(dwInputWidth, dwInputHeight, (D3DFORMAT)dwFormat, D3DPOOL_DEFAULT, (IDirect3DSurface9 **)&m_stInputSurface[i].pExtAlloc, NULL);
-                m_stInputSurface[i].bufferFmt      = NV_ENC_BUFFER_FORMAT_NV12_PL;
+                m_stInputSurface[i].bufferFmt      = NV_ENC_BUFFER_FORMAT_NV12;
                 m_stInputSurface[i].type           = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
             }
 #endif
@@ -557,22 +557,16 @@ HRESULT CNvEncoder::AllocateIOBuffers(unsigned int dwInputWidth, unsigned int dw
             stAllocInputSurface.height             = (m_dwFrameHeight + 31)&~31; //dwFrameHeight;
 #if defined (NV_WINDOWS)
             stAllocInputSurface.memoryHeap         = NV_ENC_MEMORY_HEAP_SYSMEM_CACHED;
-            stAllocInputSurface.bufferFmt          = NV_ENC_BUFFER_FORMAT_NV12_PL;
+            stAllocInputSurface.bufferFmt          = NV_ENC_BUFFER_FORMAT_NV12;
 #else
             stAllocInputSurface.memoryHeap         = NV_ENC_MEMORY_HEAP_SYSMEM_UNCACHED;
             stAllocInputSurface.bufferFmt          = m_dwInputFormat;
 #endif
 
-			//
-			// Strange, the host-buffer created must be either NV12_PL or YUV444_PL.
-			// Attempting to create a NV12_Tiled* or YUV444_Tiled* buffer results in blank-output from NVENC.
-			//
 			if (m_stEncoderInput.chromaFormatIDC == cudaVideoChromaFormat_420)
-				stAllocInputSurface.bufferFmt = NV_ENC_BUFFER_FORMAT_NV12_PL;
+				stAllocInputSurface.bufferFmt = NV_ENC_BUFFER_FORMAT_NV12;
 			else
-				stAllocInputSurface.bufferFmt = NV_ENC_BUFFER_FORMAT_YUV444_PL;
-//            else // assume it's YUV444 format
-//                stAllocInputSurface.bufferFmt      = IsNV12Tiled64x16Format(m_dwInputFormat) ? NV_ENC_BUFFER_FORMAT_NV12_PL : m_dwInputFormat;
+				stAllocInputSurface.bufferFmt = NV_ENC_BUFFER_FORMAT_YUV444;
 
             status = m_pEncodeAPI->nvEncCreateInputBuffer(m_hEncoder, &stAllocInputSurface);
             checkNVENCErrors(status);
@@ -1506,17 +1500,19 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
         }
         else  {
             bool bFmtFound = false;
-            unsigned int idx;
+			bool bFound_420 = false;
+			bool bFound_444 = false;
+			unsigned int idx;
             for (idx = 0; idx < m_dwInputFmtCount; idx++)
             {
                 // check if this HW-codec supports the requested (framebuffer) InputFormat 
-                if (encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_420 &&
-						m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16 ||
-						encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_420 &&
-						m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16 ||
-						encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_444 &&
-                        m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16)
-                {
+                bFound_420 = encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_420 &&
+						(m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_NV12);
+
+				bFound_444 = encodeConfig.chromaFormatIDC == cudaVideoChromaFormat_444 &&
+                        (m_pAvailableSurfaceFmts[idx] == NV_ENC_BUFFER_FORMAT_YUV444);
+				if ( bFound_420 || bFound_444 )
+				{
 		            m_dwInputFormat = m_pAvailableSurfaceFmts[idx];
 					bFmtFound = true;
 					break;
@@ -1545,6 +1541,11 @@ HRESULT CNvEncoder::OpenEncodeSession(const EncodeConfig encodeConfig, const uns
     {
         checkNVENCErrors(nvStatus);
     }
+
+	// (Premiere Pro only): setup which optimizations the format-repacker 
+	//                      is allowed to use
+	m_Repackyuv.set_cpu_allow_avx(m_stEncoderInput.CPU_enableAVX);
+	m_Repackyuv.set_cpu_allow_avx2(m_stEncoderInput.CPU_enableAVX2);
 
     return hr;
 }
@@ -1772,7 +1773,7 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
         p_nvEncoderConfig->level            = NV_ENC_LEVEL_AUTOSELECT;
 		p_nvEncoderConfig->idr_period       = p_nvEncoderConfig->gopLength;
         p_nvEncoderConfig->vle_entropy_mode = NV_ENC_H264_ENTROPY_CODING_MODE_CABAC; // 0==cavlc, 1==cabac
-//		p_nvEncoderConfig->chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_PL;  // 1 = YUV4:2:0, 3 = YUV4:4:4
+//		p_nvEncoderConfig->chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12;  // 1 = YUV4:2:0, 3 = YUV4:4:4
 		p_nvEncoderConfig->chromaFormatIDC = cudaVideoChromaFormat_420;  // 1 = YUV4:2:0, 3 = YUV4:4:4
 		p_nvEncoderConfig->separateColourPlaneFlag = 0;
         p_nvEncoderConfig->output_sei_BufferPeriod = 0;
@@ -1807,7 +1808,10 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
 		p_nvEncoderConfig->tier             = NV_ENC_TIER_HEVC_MAIN;   // (HEVC-only)
 		p_nvEncoderConfig->minCUsize        = NV_ENC_HEVC_CUSIZE_AUTOSELECT;// (HEVC-only)
 		p_nvEncoderConfig->maxCUsize        = NV_ENC_HEVC_CUSIZE_AUTOSELECT;// (HEVC-only)
-    }
+
+		p_nvEncoderConfig->CPU_enableAVX    = true;
+		p_nvEncoderConfig->CPU_enableAVX2   = true;
+	}
 }
 
 HRESULT
@@ -1875,7 +1879,8 @@ CNvEncoder::_QueryEncoderCaps( const GUID &codecGUID, nv_enc_caps_s &nv_enc_caps
 	QUERY_CAPS(NV_ENC_CAPS_MB_PER_SEC_MAX );
 	QUERY_CAPS(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE );
 	QUERY_CAPS(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE );
-
+	QUERY_CAPS(NV_ENC_CAPS_SUPPORT_SAO);
+	QUERY_CAPS(NV_ENC_CAPS_SUPPORT_MEONLY_MODE);
 	return S_OK;
 }
 
@@ -2188,6 +2193,11 @@ void EncodeConfig::print( string &stringout ) const {
 			os << endl;
 	}
 
+	PRINT_DEC(CPU_enableAVX)
+	os << ", ";
+	PRINT_DEC(CPU_enableAVX2)
+	os << endl;
+
 	stringout = os.str();
 }
 
@@ -2200,4 +2210,9 @@ void CNvEncoder::DestroyEncodeSession() {
 	// since session is destroyed, clear the encoder-caps struct
 	memset( (void *)&m_nv_enc_caps, 0, sizeof(m_nv_enc_caps) );
 	m_hEncoder = NULL;
+}
+
+void CNvEncoder::set_color_metadata(const CNvEncoder_color_s c)
+{
+	m_color_metadata = c;
 }

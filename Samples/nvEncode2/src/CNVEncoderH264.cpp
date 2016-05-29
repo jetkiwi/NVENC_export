@@ -286,7 +286,7 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 
 #define ADD_ENCODECONFIG_2_OSS_if_nz( var ) ADD_ENCODECONFIG_2_OSS2_if_nz(var,#var)
 
-		ADD_ENCODECONFIG_2_OSS(frameIntervalP,"IntervalP");
+		ADD_ENCODECONFIG_2_OSS2(frameIntervalP,"IntervalP");
 		if ( m_stEncoderInput.numBFrames )
 			oss << " (BFrames=" << std::dec << m_stEncoderInput.numBFrames << ")";
 		ADD_ENCODECONFIG_2_OSS2(gopLength,"gop");
@@ -346,9 +346,9 @@ HRESULT CNvEncoderH264::InitializeEncoderCodec(void * const p)
 		ADD_ENCODECONFIGH264_2_OSS2_if_nz(separateColourPlaneFlag,"sepCPF");
 		ADD_ENCODECONFIGH264_2_OSS2_if_nz(disableDeblockingFilterIDC,"disDF");
 		ADD_ENCODECONFIGH264_2_OSS2(adaptiveTransformMode,"adaTM");
-		ADD_ENCODECONFIGH264_2_OSS_if_nz(fmoMode);
+		ADD_ENCODECONFIGH264_2_OSS_if_nz(fmoMode,"fmoMode");
 		ADD_ENCODECONFIGH264_2_OSS(bdirectMode);
-		ADD_ENCODECONFIGH264_2_OSS_if_nz(outputAUD);
+		ADD_ENCODECONFIGH264_2_OSS_if_nz(outputAUD,"outputAUD");
 		//ADD_ENCODECONFIGH264_2_OSS(entropyCodingMode);
 		ADD_ENCODECONFIGH264_2_OSS(idrPeriod);
 		ADD_ENCODECONFIGH264_2_OSS(level);
@@ -565,6 +565,13 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
 		pEncodeFrame->ppro_pixelformat_is_yuyv422;
 	const bool input_yuv420 = pEncodeFrame->ppro_pixelformat_is_yuv420;
 	const bool input_yuv444 = pEncodeFrame->ppro_pixelformat_is_yuv444;
+	const bool input_rgb32f = pEncodeFrame->ppro_pixelformat_is_rgb444f;
+	const bool flag_bt709 = (m_color_metadata.color_known && (!m_color_metadata.color)) ?
+		false :   // Bt601: only chosen if metadata is explicitly set to Bt601
+		true;     // for everything else, default to Bt709
+	const bool flag_fullrange = (m_color_metadata.range_known && m_color_metadata.range_full) ?
+		true :    // full-range: only chosen if metadata is explicitly set to full-scale
+		false;    // for everything else, default to limited-scale
 
     EncodeInputSurfaceInfo  *pInput;
     EncodeOutputBuffer      *pOutputBitstream;
@@ -595,31 +602,6 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
     pInputSurface = LockInputBuffer(pInput->hInputSurface, &lockedPitch);
     pInputSurfaceCh = pInputSurface + (dwSurfHeight*lockedPitch);
 
-	// Test the stride-values and memory-pointers for 16-byte alignment.
-	// If *everything* is 16-byte aligned, then we will use the faster SSE2-function
-	//    ...otherwise must use the slower non-sse2 function
-	bool is_xmm_aligned = true;
-
-	// check both the src-stride and src-surfaces for *any* unaligned param
-	unsigned src_plane_count = input_yuv420 ?
-		3 : // YUV 4:2:0 planar (3 planes)
-		1;  // YUV444 or YUV422 (packed pixel, 1 plane only)
-
-	for( unsigned i = 0; i < src_plane_count; ++i ) {
-		if ( reinterpret_cast<uint64_t>(pEncodeFrame->yuv[i]) & 0xF ) 
-			is_xmm_aligned = false;
-		else if ( pEncodeFrame->stride[i] & 0xF )
-			is_xmm_aligned = false;
-	}
-
-	// Now check both the dest-stride and dest-surfaces for *any* unaligned param
-	if ( reinterpret_cast<uint64_t>(pInputSurface) & 0xF )
-		is_xmm_aligned = false;
-	else if ( reinterpret_cast<uint64_t>(pInputSurfaceCh) & 0xF )
-		is_xmm_aligned = false;
-	else if ( lockedPitch & 0xF )
-		is_xmm_aligned = false;
-
 	// IsNV12Tiled16x16Format (bunch of sqaures)
 	//convertYUVpitchtoNV12tiled16x16(pLuma, pChromaU, pChromaV,pInputSurface, pInputSurfaceCh, dwWidth, dwHeight, dwWidth, lockedPitch);
     //(IsNV12PLFormat(pInput->bufferFmt))  (Luma plane intact, chroma planes broken)
@@ -629,106 +611,69 @@ HRESULT CNvEncoderH264::EncodeFramePPro(
 		//
 		// Convert the source-video (YUVA_4444 32bpp packed-pixel) into 
 		// planar format 4:4. (NVENC only accepts YUV444 3-plane format)
-		//
-
-		if ( is_xmm_aligned ) {
-			m_Repackyuv._convert_YUV444toY444_ssse3( // Streaming SSE3 version of converter
-				dwWidth, dwHeight, (pEncodeFrame->stride[0] >> 2) >> 2,
-				reinterpret_cast<__m128i *>(pEncodeFrame->yuv[0]),
-				lockedPitch >> 4,
-				reinterpret_cast<__m128i *>(pInputSurface),    // output Y
-				reinterpret_cast<__m128i *>(pInputSurfaceCh),  // output U
-				reinterpret_cast<__m128i *>(pInputSurfaceCh + (dwSurfHeight*lockedPitch)) // output V
-			);
-		}
-		else {
-			// not XMM aligned- call the non-SSE function
-			m_Repackyuv._convert_YUV444toY444(  // non-SSE version (slow)
-				dwWidth, dwHeight, pEncodeFrame->stride[0] >> 2,
-				reinterpret_cast<uint32_t *>(pEncodeFrame->yuv[0]),
-				lockedPitch,
+		if (input_yuv444) {
+			m_Repackyuv.convert_YUV444toY444(  // non-SSE version (slow)
+				dwWidth, dwHeight,
+				pEncodeFrame->stride[0], // srcStride (units of uint8_t)
+				pEncodeFrame->yuv[0], // source framebuffer (YUV444)
+				lockedPitch,      // destStride (units uint8_t)
 				pInputSurface,    // output Y
 				pInputSurfaceCh,  // output U
 				pInputSurfaceCh + (dwSurfHeight*lockedPitch) // output V
 			);
-		} // if ( is_xmm_aligned )
+		} 
+		else if (input_rgb32f) {
+			m_Repackyuv.convert_RGBFtoY444( // SSE4.1 version of converter
+				flag_bt709, // true = bt709, false=bt601
+				flag_fullrange,// true=PC/full scale, false=video scale (0-235)
+				dwWidth, dwHeight, pEncodeFrame->stride[0], // src stride (units of uint8_t)
+				pEncodeFrame->yuv[0],
+				lockedPitch,  // destStride (units of uint8_t)
+				pInputSurface,    // output Y
+				pInputSurfaceCh,  // output U
+				pInputSurfaceCh + (dwSurfHeight*lockedPitch) // output V
+			);
+		}
 	} // if ( m_stEncoderInput.chromaFormatIDC == cudaVideoChromaFormat_444 ) )
 
 	if (m_stEncoderInput.chromaFormatIDC == cudaVideoChromaFormat_420) {
 		
-		if ( input_yuv420) {
+		if (input_rgb32f) {
+			m_Repackyuv.convert_RGBFtoNV12( // SSE4.1 version of converter
+				flag_bt709, // true = bt709, false=bt601
+				flag_fullrange,// true=PC/full scale, false=video scale (0-235)
+				dwWidth, dwHeight, pEncodeFrame->stride[0], // src stride (units of _m128)
+				pEncodeFrame->yuv[0],
+				lockedPitch,
+				pInputSurface,    // output Y
+				pInputSurfaceCh   // output UV
+			);
+		}
+		else if ( input_yuv420) {
 			// Note, PPro handed us YUV4:2:0 (YV12) data, and NVENC only accepts 
 			// 4:2:0 pixel-data in the NV12_planar format (2 planes.)
 			//
-			// ... So we must convert the source-frame from YUV420 -> NV12
-
-			/////////////////////////////
-			//
-			// Select which YUV420 -> NV12 conversion algorithm to use
-			//
-
-			if ( is_xmm_aligned ) {
-				__m128i      *xmm_src_yuv[3];
-				unsigned int xmm_src_stride[3];// stride in units of 128bits (i.e. 'stride==1' means 16 bytes)
-				__m128i      *xmm_dst_luma;
-				__m128i      *xmm_dst_chroma;
-				unsigned int xmm_dst_stride;   // destination stride (units of 128 bits)
-
-				for(unsigned i = 0; i < 3; ++i ) {
-					xmm_src_yuv[i]    = reinterpret_cast<__m128i *>(pEncodeFrame->yuv[i]);
-					xmm_src_stride[i] = pEncodeFrame->stride[i] >> 4;
-				}
-				xmm_dst_luma   = reinterpret_cast<__m128i *>(pInputSurface);
-				xmm_dst_chroma = reinterpret_cast<__m128i *>(pInputSurfaceCh);
-				xmm_dst_stride = lockedPitch >> 4;
-
-				m_Repackyuv._convert_YUV420toNV12_sse2( // faster sse2 version (requires 16-byte data-alignment)
-					dwWidth, dwHeight,
-					xmm_src_yuv,
-					xmm_src_stride,
-					xmm_dst_luma, xmm_dst_chroma, 
-					xmm_dst_stride
-				);
-			}
-			else {
-				// not XMM-aligned: call the plain (non-SSE2) function
-				m_Repackyuv._convert_YUV420toNV12(  // plain (non-SSE2) version, slower
-					dwWidth, dwHeight,
-					pEncodeFrame->yuv,
-					pEncodeFrame->stride,
-					pInputSurface, reinterpret_cast<uint16_t*>(pInputSurfaceCh), 
-					lockedPitch
-				);
-			}
+			// convert the source-frame from YUV422 -> NV12
+			m_Repackyuv.convert_YUV420toNV12(  // plain (non-SSE2) version, slower
+				dwWidth, dwHeight,
+				pEncodeFrame->yuv,    // pointers to source framebuffer Y/U/V
+				pEncodeFrame->stride, // srcStride
+				pInputSurface,        // pointer to destination framebuffer Y
+				pInputSurfaceCh,      // destination framebuffer UV
+				lockedPitch    // dstStride
+			);
 		} ///////////////// if ( input_yuv420)
 		else if (input_yuv422) {
-			// Note, PPro handed us YUV4:2:2 (16bpp packed) data, and NVENC only accepts 
-			// 4:2:0 pixel-data in the NV12_planar format (2 planes.)
-			//
-			// ... So we must convert the source-frame from YUV422 -> NV12
-
-			/////////////////////////////
-			//
-			// Select which YUV420 -> NV12 conversion algorithm to use
-			//
-			if ( is_xmm_aligned )
-				m_Repackyuv._convert_YUV422toNV12_ssse3(  // non-SSE version (slow)
-					pEncodeFrame->ppro_pixelformat_is_uyvy422, // chroma-order: true=UYVY, false=YUYV
-					dwWidth, dwHeight, pEncodeFrame->stride[0] >> 1,
-					reinterpret_cast<__m128i *>(pEncodeFrame->yuv[0]),
-					lockedPitch,
-					reinterpret_cast<__m128i *>(pInputSurface),    // output Y
-					reinterpret_cast<__m128i *>(pInputSurfaceCh)  // output UV
-				);
-			else
-				m_Repackyuv._convert_YUV422toNV12(  // non-SSE version (slow)
-					pEncodeFrame->ppro_pixelformat_is_uyvy422, // chroma-order: true=UYVY, false=YUYV
-					dwWidth, dwHeight, pEncodeFrame->stride[0] >> 1,
-					reinterpret_cast<uint32_t *>(pEncodeFrame->yuv[0]),
-					lockedPitch,
-					pInputSurface,    // output Y
-					pInputSurfaceCh  // output UV
-				);
+			// PPro handed us YUV4:2:2 (16bpp packed) data, and NVENC only accepts 
+			// convert the source-frame from YUV422 -> NV12
+			m_Repackyuv.convert_YUV422toNV12(  // non-SSE version (slow)
+				pEncodeFrame->ppro_pixelformat_is_uyvy422, // chroma-order: true=UYVY, false=YUYV
+				dwWidth, dwHeight, pEncodeFrame->stride[0],
+				pEncodeFrame->yuv[0], // source framebuffer (YUV422)
+				lockedPitch,
+				pInputSurface,    // output Y
+				pInputSurfaceCh  // output UV
+			);
 
 		} ///////////////// if (input_yuv422)
 		else {

@@ -48,6 +48,14 @@ const PrPixelFormat SupportedPixelFormats444[] = {
 	PrPixelFormat_VUYA_4444_8u
 };
 
+// These pixelformats are used for NVENC chromaformatIDC = RGB
+//  nvenc_export must convert this RGB to YUV444
+//  (requires NV_ENC_CAPS_SUPPORT_YUV444_ENCODE == 1)
+const PrPixelFormat SupportedPixelFormatsRGB[] = {
+	PrPixelFormat_BGRX_4444_32f, // highest priority
+	PrPixelFormat_BGRA_4444_32f
+};
+
 //////////////////////////////////////////////////////////////////////////////
 //
 // local functions (for use in this file only)
@@ -82,7 +90,9 @@ prSuiteError
 NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * const exportInfoP)
 {
 	ExportSettings	*mySettings = reinterpret_cast<ExportSettings *>(exportInfoP->privateData);
-	NV_ENC_CONFIG_H264_VUI_PARAMETERS vui; // Encoder's video-usability struct (for color info)
+	NV_ENC_CONFIG_H264_VUI_PARAMETERS vui;   // Encoder's video-usability struct (for color info)
+	NV_ENC_CONFIG_HEVC_VUI_PARAMETERS vui265;// Encoder's video-usability struct (for color info)
+	CNvEncoder_color_s color_metadata;
 	NVENCSTATUS nvencstatus = NV_ENC_SUCCESS; // OpenSession() return code
 	HRESULT hr;
 
@@ -96,8 +106,12 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 	// same PrPixelFormat for the entire clip. 
 
 	memset(&vui, 0, sizeof(NV_ENC_CONFIG_H264_VUI_PARAMETERS));
+	memset(&vui265, 0, sizeof(NV_ENC_CONFIG_HEVC_VUI_PARAMETERS));
+
+#define COPY_VUI_FIELD(f)  vui265.f = vui.f;
 
 	vui.videoSignalTypePresentFlag = 1; // control: vui.videoFormat is valid
+	COPY_VUI_FIELD(videoSignalTypePresentFlag)
 
 	// videoFormat
 	// -----------
@@ -119,8 +133,10 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 	default: // unknown
 		vui.videoFormat = 5; // unspecified
 	}
+	COPY_VUI_FIELD(videoFormat)
 
 	vui.colourDescriptionPresentFlag = 1; // control: colourMatrix, primaries, etc. are valid
+	COPY_VUI_FIELD(colourDescriptionPresentFlag)
 
 	// Matrix
 	//  0 = GBR
@@ -151,6 +167,8 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709:
 	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709_FullRange:
 		vui.colourMatrix = 1;
+		color_metadata.color_known = true;
+		color_metadata.color = true; // Bt709
 		break;
 
 	case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601:
@@ -165,10 +183,14 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601:
 	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601_FullRange:
 		vui.colourMatrix = 6;
+		color_metadata.color_known = true;
+		color_metadata.color = false; // Bt601
 		break;
 	default:
+		color_metadata.color_known = false;
 		vui.colourMatrix = 2; // unspecified
 	}
+	COPY_VUI_FIELD(colourMatrix)
 
 	// colourPrimaries
 	//  0 =reserved
@@ -178,6 +200,11 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 	//  ...
 	vui.colourPrimaries = vui.colourMatrix;
 	vui.transferCharacteristics = vui.colourPrimaries;
+	
+	COPY_VUI_FIELD(colourPrimaries)
+	COPY_VUI_FIELD(transferCharacteristics)
+
+	color_metadata.range_known = false;
 
 	// Is the video full-range (0..255)?
 	switch (PixelFormat0) {
@@ -189,10 +216,26 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 	case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_601_FullRange:
 	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709_FullRange:
 	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601_FullRange:
+		color_metadata.range_known = true;
+		color_metadata.range_full = true;
 		vui.videoFullRangeFlag = 1;
 		break;
 	default:
 		vui.videoFullRangeFlag = 0; // off
+	}
+	COPY_VUI_FIELD(videoFullRangeFlag)
+
+	switch (PixelFormat0) {
+	case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709:
+	case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601:
+	case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709:
+	case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601:
+	case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_709:
+	case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_601:
+	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709:
+	case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601:
+		color_metadata.range_known = true;
+		color_metadata.range_full = false;
 	}
 
 	//////////////////////////////
@@ -234,12 +277,28 @@ NVENC_initialize_h264_session(const PrPixelFormat PixelFormat0, exDoExportRec * 
 		return malUnknownError;
 	}
 
-	hr = mySettings->p_NvEncoder->InitializeEncoderCodec((void *)&vui);
+	void * pvui = NULL; // pointer to VUI-struct
+
+	// Select the correct VUI-struct
+	switch (mySettings->NvEncodeConfig.codec) {
+		case NV_ENC_H264 : pvui = &vui;
+			break;
+
+		case NV_ENC_H265 : pvui = &vui265;
+			break;
+
+		default:
+			;
+	}
+
+	hr = mySettings->p_NvEncoder->InitializeEncoderCodec( pvui );
 	if (hr != S_OK) {
 		printf("\nnvEncoder Error: NVENC H.264 encoder initialization failure! Check input params!\n");
 		assert(0); // NVENC H.264 encoder InitializeEncoderH264 failure
 		return malUnknownError;
 	}
+
+	mySettings->p_NvEncoder->set_color_metadata(color_metadata);
 
 	return hr;
 }
@@ -289,6 +348,9 @@ prSuiteError NVENC_export_FrameCompletionFunction(
 	nvEncodeFrameConfig.ppro_pixelformat_is_yuyv422 =
 		(rendered_pixelformat == PrPixelFormat_YUYV_422_8u_601) ||
 		(rendered_pixelformat == PrPixelFormat_YUYV_422_8u_709);
+	nvEncodeFrameConfig.ppro_pixelformat_is_rgb444f = 
+		(rendered_pixelformat == PrPixelFormat_BGRA_4444_32f) ||
+		(rendered_pixelformat == PrPixelFormat_BGRX_4444_32f);
 
 	// NVENC picture-type: Interlaced vs Progressive
 	//
@@ -393,20 +455,16 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 		*v410Buffer = NULL;
 	HWND mainWnd = mySettings->windowSuite->GetMainWindow();
 	SequenceRender_ParamsRec renderParms;
-	//PrPixelFormat pixelFormats[] = {PrPixelFormat_BGRA_4444_8u, PrPixelFormat_BGRA_4444_8u};
-	PrPixelFormat *pixelFormats = NULL;
 	csSDK_int32 nvenc_pixelformat; // selected NVENC input pixelFormat (user-parameter from plugin)
 	mySettings->exportParamSuite->GetParamValue(exID, 0, ParamID_chromaFormatIDC, &temp_param);
 	nvenc_pixelformat = temp_param.value.intValue;
 
 	// Frmaebuffer format flags: what chromaformat video is Adobe-app outputting?
-	//   Exactly one of the following flags must be true.
-	// 
-	const bool adobe_yuv444 = (nvenc_pixelformat == cudaVideoChromaFormat_444);// a 4:4:4 format is in use (instead of 4:2:0)
-	bool adobe_yuv420 = false;// (Adobe is outputing YUV420, i.e. 'YV12')
-	bool adobe_yuv422 = false;// (Adobe is outputing YUV420, i.e. 'YV12')
-
-
+	//   Exactly one of the following flags must be true. (Flags will be updated later)
+	bool adobe_yuv444 = (nvenc_pixelformat == cudaVideoChromaFormat_444);// a 4:4:4 format is in use (instead of 4:2:0)
+	bool adobe_yuv420 = false;// (Adobe is outputing YUV 4:2:0, i.e. 'YV12')
+	bool adobe_yuv422 = false;// (Adobe is outputing YUV 4:2:2, i.e. 'YUYV')
+	
 	if (isFrame0) {
 		// First frame of render:
 		// ----------------------
@@ -436,7 +494,7 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 			renderParms.inRequestedPixelFormatArrayCount = 1;
 		}
 		else if (adobe_yuv444) {
-			// Packed Pixel YUV 4:4:4 (24bpp + 8bit alpha, NVECN doesn't use the alpha-channel)
+			// Packed Pixel YUV 4:4:4 (24bpp + 8bit alpha, NVENC doesn't use the alpha-channel)
 			//
 			// Assume NVENC is configured to encode 4:4:4 video. 
 			// (because we never send packed YUV 4:4:4 to NVENC. in 4:2:0 H264 encoding mode)
@@ -488,10 +546,9 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 			kRenderCacheType_None,	// [TODO] Try different settings
 			&renderResult);
 
+		// If YUV420-video failed, make another attempt with YUV422
 		if (PrSuiteErrorFailed(resultS) && !adobe_yuv444) {
-			// chromaFormat: YUV420
-
-			// The videorender failed with Planar YUV 4:2:0,
+			// We attempted {chromaFormat: YUV420}, but the videorender failed.
 			//    ... so retry the videorender with YUV 4:2:2 packed-pixel instead
 			renderParms.inRequestedPixelFormatArray = SupportedPixelFormats422;
 			renderParms.inRequestedPixelFormatArrayCount = sizeof(SupportedPixelFormats422) / sizeof(SupportedPixelFormats422[0]);
@@ -504,62 +561,74 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 				&renderResult);
 		}
 
-		if (PrSuiteErrorFailed(resultS)) {
+		// If YUV422 or YUV444 failed, make a final attempt with RGBf
+		if (PrSuiteErrorFailed(resultS)) { // 2nd-attempt (RGBf)
 			ostringstream o;
 			PrParam		hasVideo, seqWidth, seqHeight;
+			// 2nd videorender attempt failed {chromaFormat: YUV422},
+			//   ... retry one last time with RGB32f.
 
-			Check_prSuiteError(resultS, errstr);
-			o << __FILE__ << "(" << std::dec << __LINE__ << "): ";
-			o << "There was a problem with exporting video." << std::endl;
-			o << "On frame#0, RenderVideoFrame() failed with error-value: " << errstr;
+			renderParms.inRequestedPixelFormatArray = SupportedPixelFormatsRGB;
+			renderParms.inRequestedPixelFormatArrayCount = sizeof(SupportedPixelFormatsRGB) / sizeof(SupportedPixelFormatsRGB[0]);
 
-			// 2 problems:
-			// -----------
-			// (1) Checking the source-video and framesize here doesn't work, because
-			//     Adobe presents a exportInfoSuite with modified properties that are
-			//     'conformed' to the user-selected output-size. 
+			resultS = mySettings->sequenceRenderSuite->RenderVideoFrame(
+				mySettings->videoRenderID,
+				videoTime,
+				&renderParms,
+				kRenderCacheType_None,	// [TODO] Try different settings
+				&renderResult);
 
-			// (2) In Premeire CS6 and CC, if CUDA hardware-acceleration is enabled,
-			//     Adobe's video-renderer will refuse to resize Pixelformat YUV.
-			//     (It seems that packed-pixel RGB 32bpp is the only format natively
-			//      resized by the CUDA-accelerated MPE.)
-			mySettings->exportInfoSuite->GetExportSourceInfo(exID,
-				kExportInfo_SourceHasVideo,
-				&hasVideo);
-			mySettings->exportInfoSuite->GetExportSourceInfo(exID,
-				kExportInfo_VideoWidth,
-				&seqWidth);
-			mySettings->exportInfoSuite->GetExportSourceInfo(exID,
-				kExportInfo_VideoHeight,
-				&seqHeight);/*
-							if ( (hasVideo.mBool == kPrTrue) &&
-							((seqWidth.mInt32 != renderParms.inWidth ) ||
-							(seqHeight.mInt32 != renderParms.inHeight )) )
-							{
-							*/
-			// 
-			o << std::endl << std::endl;
-			o << "If CUDA hardware-acceleration is enabled, Adobe may fail to resize the video." << std::endl;
-			o << "Either disable acceleration, or change the chosen output-size to match " << std::endl;
-			o << "the source's size ( " << std::dec << renderParms.inWidth << " x " << std::dec;
-			o << renderParms.inHeight << " )" << std::endl;
-			/*
-			acceleratio Source video_width / height = " << std::dec << seqWidth.mInt32
-			<< " / " << std::dec << seqHeight.mInt32 << std::endl;
-			o << "Output video_width / height = " << std::dec << renderParms.inWidth
-			<< " / " << std::dec << renderParms.inHeight << std::endl;
-			o << "NVENC_export cannot resize the source-video.  Please change the output video size to match the source size!";
-			*/
-			//			} 
+			if (PrSuiteErrorFailed(resultS)) { 
+				// Give up!
 
-			MessageBox(GetLastActivePopup(mainWnd),
-				o.str().c_str(),
-				EXPORTER_NAME,
-				MB_ICONERROR
-				);
+				// 2 problems:
+				// -----------
+				// (1) Checking the source-video and framesize here doesn't work, because
+				//     Adobe presents a exportInfoSuite with modified properties that are
+				//     'conformed' to the user-selected output-size. 
 
-			return resultS;
-		} // PrSuiteErrorFailed
+				// (2) In Premeire CS6 and CC, if CUDA hardware-acceleration is enabled,
+				//     Adobe's video-renderer will refuse to resize Pixelformat YUV.
+				//     (It seems that packed-pixel RGB 32bpp is the only format natively
+				//      resized by the CUDA-accelerated MPE.)
+				mySettings->exportInfoSuite->GetExportSourceInfo(exID,
+					kExportInfo_SourceHasVideo,
+					&hasVideo);
+				mySettings->exportInfoSuite->GetExportSourceInfo(exID,
+					kExportInfo_VideoWidth,
+					&seqWidth);
+				mySettings->exportInfoSuite->GetExportSourceInfo(exID,
+					kExportInfo_VideoHeight,
+					&seqHeight);/*
+								if ( (hasVideo.mBool == kPrTrue) &&
+								((seqWidth.mInt32 != renderParms.inWidth ) ||
+								(seqHeight.mInt32 != renderParms.inHeight )) )
+								{
+								*/
+				// 
+				o << std::endl << std::endl;
+				o << "If CUDA hardware-acceleration is enabled, Adobe may fail to resize the video." << std::endl;
+				o << "Either disable acceleration, or change the chosen output-size to match " << std::endl;
+				o << "the source's size ( " << std::dec << renderParms.inWidth << " x " << std::dec;
+				o << renderParms.inHeight << " )" << std::endl;
+				/*
+				acceleratio Source video_width / height = " << std::dec << seqWidth.mInt32
+				<< " / " << std::dec << seqHeight.mInt32 << std::endl;
+				o << "Output video_width / height = " << std::dec << renderParms.inWidth
+				<< " / " << std::dec << renderParms.inHeight << std::endl;
+				o << "NVENC_export cannot resize the source-video.  Please change the output video size to match the source size!";
+				*/
+				//			} 
+
+				MessageBox(GetLastActivePopup(mainWnd),
+					o.str().c_str(),
+					EXPORTER_NAME,
+					MB_ICONERROR
+					);
+
+				return resultS;
+			} // PrSuiteErrorFailed (Give up!)
+		} // PrSuiteErrorFailed (2nd-attempt RGBf)
 
 		// Record the pixelFormat of the 1st frame of output. 
 		// (NVENC-plugin will lock the remainder of the video-render to this format.)
@@ -614,6 +683,13 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 	nvEncodeFrameConfig.height = height.value.intValue;
 	nvEncodeFrameConfig.width = width.value.intValue;
 
+	// Update the PrPixelformat flags (what is the Adobe-app actually sending us?)
+	//bool adobe_rgb32 = PrPixelFormat_is_RGB32f(mySettings->rendered_PixelFormat0);
+	adobe_yuv444 = PrPixelFormat_is_YUV444(mySettings->rendered_PixelFormat0) &&
+		(nvenc_pixelformat == cudaVideoChromaFormat_444);
+	adobe_yuv420 = PrPixelFormat_is_YUV420(mySettings->rendered_PixelFormat0);
+	adobe_yuv422 = PrPixelFormat_is_YUV422(mySettings->rendered_PixelFormat0);
+
 	// CNvEncoderH264 must know the source-video's pixelformat, in order to
 	//    convert it into an NVENC compatible format (NV12 or YUV444)
 	nvEncodeFrameConfig.ppro_pixelformat = mySettings->rendered_PixelFormat0;
@@ -625,6 +701,7 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 	nvEncodeFrameConfig.ppro_pixelformat_is_yuyv422 =
 		(mySettings->rendered_PixelFormat0 == PrPixelFormat_YUYV_422_8u_601) ||
 		(mySettings->rendered_PixelFormat0 == PrPixelFormat_YUYV_422_8u_709);
+	nvEncodeFrameConfig.ppro_pixelformat_is_rgb444f = PrPixelFormat_is_RGB32f(mySettings->rendered_PixelFormat0);
 
 	// NVENC picture-type: Interlaced vs Progressive
 	//
@@ -644,27 +721,23 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 			&seqFieldOrder);
 		nvEncodeFrameConfig.topField = (seqFieldOrder.mInt32 == prFieldsLowerFirst) ? false : true;
 	}
+	
+	//
+	// Get critical properties of the Adobe rendered videoframe:
+	//
+	//   Stride  (#bytes per scanline of video)
+	//   Pointer (start-address of the videoframe's pixeldata)
 
-	if (adobe_yuv444 || adobe_yuv422) {
-		// 4:4:4 packed pixel - only pointer[0] is used, (1 & 2 aren't)
-		mySettings->ppixSuite->GetPixels(renderResult.outFrame,
-			PrPPixBufferAccess_ReadOnly,
-			&frameBufferP);
-		mySettings->ppixSuite->GetRowBytes(renderResult.outFrame, &rowbytes);
-		nvEncodeFrameConfig.stride[0] = rowbytes; // Y-plane
+	if ( adobe_yuv420 ) {
+		// Adobe's "Planar420" surface format requires special handling (compared
+		// to the packed-pixel formats)
+		// 
+		// In particular, there are 3 different surface pointers (and 3 stride values)
+		// for Planar-4:2:0.  These are queried through the ppix2Suite.
 
-		nvEncodeFrameConfig.yuv[0] = reinterpret_cast<unsigned char *>(&frameBufferP[0]); // Y-plane
-		nvEncodeFrameConfig.stride[1] = 0; // U-plane not used
-		nvEncodeFrameConfig.stride[2] = 0; // V-plane not used
-		nvEncodeFrameConfig.yuv[1] = NULL;
-		nvEncodeFrameConfig.yuv[2] = NULL;
-	}
-	else {
 		size_t       rowsize;
 		csSDK_uint32 stride[3]; // #bytes per row (for each of Y/U/V planes)
 
-		// 4:2:0 planar (all 3 pointers used)
-		// must use ppix2Suite to access Planar frame(s)
 		mySettings->ppix2Suite->GetYUV420PlanarBuffers(
 			renderResult.outFrame,
 			PrPPixBufferAccess_ReadOnly,
@@ -680,6 +753,24 @@ prMALError RenderAndWriteVideoFrame(  // export a single frame of video to NVENC
 		nvEncodeFrameConfig.stride[2] = stride[2];
 		mySettings->ppix2Suite->GetSize(renderResult.outFrame, &rowsize);
 		rowbytes = rowsize;
+	}
+	else {
+		// The packed-pixel formats that nvenc_export supports (YUV444, YUV422, RGB32)
+		// are queried pretty much the same way (through ppixSuite).
+		//
+		// ...only pointer[0] and stride0 is used, (pointer[1] & [2] aren't used)
+
+		mySettings->ppixSuite->GetPixels(renderResult.outFrame,
+			PrPPixBufferAccess_ReadOnly,
+			&frameBufferP);
+		mySettings->ppixSuite->GetRowBytes(renderResult.outFrame, &rowbytes);
+		nvEncodeFrameConfig.stride[0] = rowbytes; // Y-plane
+
+		nvEncodeFrameConfig.yuv[0] = reinterpret_cast<unsigned char *>(&frameBufferP[0]); // Y-plane
+		nvEncodeFrameConfig.stride[1] = 0; // U-plane not used
+		nvEncodeFrameConfig.stride[2] = 0; // V-plane not used
+		nvEncodeFrameConfig.yuv[1] = NULL;
+		nvEncodeFrameConfig.yuv[2] = NULL;
 	}
 
 	// Submit the Adobe rendered frame to NVENC:

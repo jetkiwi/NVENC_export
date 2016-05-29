@@ -256,6 +256,13 @@
 #define		ParamID_BasicMux_MKVMERGE_Path	"ParamID_BasicMux_MKVMERGE_Path"
 #define		Default_BasicMux_MKVMERGE_Path	L"C:\\TEMP\\MEGUI\\TOOLS\\MKVMERGE\\MKVMERGE.EXE"
 
+		#define ParamID_VideoCodec_CPU_Report_CAP "CPU capabilities"
+		#define LParamID_VideoCodec_CPU_Report_CAP L"CPU capabilities"
+		#define ParamID_VideoCodec_CPU_EnableAVX  "Enable AVX"
+		#define LParamID_VideoCodec_CPU_EnableAVX  L"Enable AVX"
+		#define ParamID_VideoCodec_CPU_EnableAVX2  "Enable AVX2"
+		#define LParamID_VideoCodec_CPU_EnableAVX2  L"Enable AVX2"
+
 prMALError exSDKGenerateDefaultParams(
 	exportStdParms				*stdParms, 
 	exGenerateDefaultParamRec	*generateDefaultParamRec);
@@ -307,6 +314,9 @@ PrPixelFormat_is_YUV422( const PrPixelFormat p );
 bool
 PrPixelFormat_is_YUV444( const PrPixelFormat p );
 
+bool
+PrPixelFormat_is_RGB32f(const PrPixelFormat p);
+
 void
 NVENC_GetEncoderCaps(const NvEncodeCompressionStd codec, const nv_enc_caps_s &caps, string &s);
 
@@ -352,7 +362,7 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 );
 
 void
-update_exportParamSuite_GPUSelectGroup(
+update_exportParamSuite_GPUSelectGroup( // GPU selection dialog
 	const csSDK_uint32 exID,
 	const ExportSettings *lRec,
 	const int GPUIndex,   // GPU-ID#, '-1' means NO NVidia GPUs found
@@ -369,19 +379,25 @@ update_exportParamSuite_VideoGroup(
 	ExportSettings *lRec);
 
 void
-update_exportParamSuite_NVENCMultiplexerGroup(
+update_exportParamSuite_NVENCMultiplexerGroup( // Multiplexer settings
 	const csSDK_uint32 exID,
 	ExportSettings *lRec
 );
 
 void
-update_exportParamSuite_AudioFormatGroup(
+update_exportParamSuite_AudioFormatGroup( // Audio settings
 	const csSDK_uint32 exID,
 	ExportSettings *lRec
 );
 
 void
-update_exportParamSuite_BasicAudioGroup(
+update_exportParamSuite_BasicAudioGroup( // Audio settings
+	const csSDK_uint32 exID,
+	ExportSettings *lRec
+);
+
+void
+update_exportParamSuite_VideoCodecGroup( // Host CPU capabilities, Codecinfo button
 	const csSDK_uint32 exID,
 	ExportSettings *lRec
 );

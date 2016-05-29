@@ -232,10 +232,13 @@ void queryAllEncoderCaps(CNvEncoder *pEncoder, string &s)
         QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_PREPROC_SUPPORT);
         QUERY_PRINT_CAPS(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
-		QUERY_PRINT_CAPS(NV_ENC_CAPS_MB_NUM_MAX);     // still fails with Geforce 340.52 driver
-		QUERY_PRINT_CAPS(NV_ENC_CAPS_MB_PER_SEC_MAX );// still fails with Geforce 340.52 driver
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_MB_NUM_MAX);     
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_MB_PER_SEC_MAX );
 		QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE );
 		QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE );
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_SAO);   // NVENC 6.0
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_MEONLY_MODE); // NVENC 6.0
+		//QUERY_PRINT_CAPS(NV_ENC_CAPS_EXPOSED_COUNT);
     }
 
 	s = os.str();
@@ -292,7 +295,9 @@ unsigned int checkNumberEncoders(EncoderGPUInfo *encoderInfo)
 int main(const int argc, char *argv[])
 {
 	CUVIDEOFORMAT inCuvideoformat[MAX_ENCODERS]; // input-file's format information
-    NV_ENC_CONFIG_H264_VUI_PARAMETERS vui; // Encoder's video-usability struct (for color info)
+    NV_ENC_CONFIG_H264_VUI_PARAMETERS vui;    // H264-Encoder's video-usability struct (for color info)
+	NV_ENC_CONFIG_HEVC_VUI_PARAMETERS vui265; // H265-Encoder's video-usability struct (for color info)
+
 	NVENCSTATUS nvencstatus = NV_ENC_SUCCESS; // OpenEncodeSession() return code
 	FILE *fOutput[MAX_ENCODERS] = {NULL};
     int retval        = 1;
@@ -319,7 +324,8 @@ int main(const int argc, char *argv[])
 #endif
 
     memset(&nvEncoderConfig, 0 , sizeof(EncodeConfig)*MAX_ENCODERS);
-    memset(&vui, 0, sizeof(NV_ENC_CONFIG_H264_VUI_PARAMETERS));
+    memset(&vui   , 0, sizeof(NV_ENC_CONFIG_H264_VUI_PARAMETERS));
+	memset(&vui265, 0, sizeof(NV_ENC_CONFIG_HEVC_VUI_PARAMETERS));
 	memset(inCuvideoformat, 0, sizeof(inCuvideoformat));
 	memset(fOutput, NULL, sizeof(fOutput));
 
@@ -347,6 +353,19 @@ int main(const int argc, char *argv[])
     nvEncoderConfig[0].frameRateDen = inCuvideoformat[0].frame_rate.denominator;
     nvEncoderConfig[0].frameRateNum = inCuvideoformat[0].frame_rate.numerator;
     nvEncoderConfig[0].FieldEncoding = inCuvideoformat[0].progressive_sequence ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME : NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
+
+	// kludge: when input file is encoded in H265/HEVC, the cuvid decoder API
+	//         fails to report the correct framerate, leaving it 0/0.
+	//         Check the frame-rate and notify the user to take action.
+	if (nvEncoderConfig[0].frameRateDen == 0 || nvEncoderConfig[0].frameRateNum == 0) {
+		printf( "ERROR, input file has a reported frameRate (Num/Den) = %0u/%0u\n",
+			nvEncoderConfig[0].frameRateNum, nvEncoderConfig[0].frameRateDen
+		);
+		printf( "Auto-detection of input-file framerate has failed.  You must manually\n");
+		printf( "specify the framerate (m/n) using the following command-line options:\n");
+		printf("-numerator=<m>, -denominator=<n>\n");
+		exit(EXIT_FAILURE);
+	}
 
 	///////////////////////////////////////////////////////////
 	//
@@ -545,13 +564,21 @@ int main(const int argc, char *argv[])
 
     // Set the 'Video Usability Info' struct -
     //   identifies the exact colorspace geometry (eg. BT-709)
-    if ( 1 )  { // ( inCuvideoformat.video_signal_description.video_format < 5 )
+	if ( 1 )  { // ( inCuvideoformat.video_signal_description.video_format < 5 )
         vui.videoSignalTypePresentFlag = 1;
         vui.videoFormat = inCuvideoformat[0].video_signal_description.video_format;
         vui.colourDescriptionPresentFlag = 1;
         vui.colourMatrix = inCuvideoformat[0].video_signal_description.matrix_coefficients;
         vui.colourPrimaries = inCuvideoformat[0].video_signal_description.color_primaries;
         vui.transferCharacteristics = inCuvideoformat[0].video_signal_description.transfer_characteristics;
+
+#define COPY_VUI_FIELD(f) vui265.f = vui.f;
+		COPY_VUI_FIELD(videoSignalTypePresentFlag)
+		COPY_VUI_FIELD(videoFormat)
+		COPY_VUI_FIELD(colourDescriptionPresentFlag)
+		COPY_VUI_FIELD(colourMatrix)
+		COPY_VUI_FIELD(colourPrimaries)
+		COPY_VUI_FIELD(transferCharacteristics)
     }
 
 	///////////////////////////////////////////////////////////////////////////
@@ -638,9 +665,24 @@ int main(const int argc, char *argv[])
         pEncoder[encoderID]->OpenEncodeSession( nvEncoderConfig[encoderID], encoderInfo[encoderID].device, nvencstatus );
 
 //        if ( S_OK != pEncoder[encoderID]->InitializeEncoder() )
-        if ( S_OK != pEncoder[encoderID]->InitializeEncoderCodec( (void *)&vui ) )
+		HRESULT hr = S_FALSE;
+		switch (nvEncoderConfig[0].codec) {
+			case NV_ENC_H264:
+				hr = pEncoder[encoderID]->InitializeEncoderCodec((void *)&vui);
+				break;
+
+			case NV_ENC_H265:
+				hr = pEncoder[encoderID]->InitializeEncoderCodec((void *)&vui265);
+				break;
+
+			default:
+				printf("main2(): ERROR, unknown codec(%0d)\n", nvEncoderConfig[0].codec);
+				exit(EXIT_FAILURE);
+		}
+
+        if ( hr != S_OK )
         {
-            printf("\nnvEncoder Error InitializeEncoderCodec(): encoder initialization failure! Check input params!\n");
+            printf("\nmain2(): nvEncoder Error InitializeEncoderCodec(): encoder initialization failure(%0X)! Check input params!\n", hr);
             return 1;
         }
 

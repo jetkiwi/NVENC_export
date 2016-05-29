@@ -34,9 +34,6 @@
     <ClCompile Include="..\core\threads\NvThreadingWin32.cpp">
       <Filter>NVENC_SDK</Filter>
     </ClCompile>
-    <ClCompile Include="Exporter\cpuid_ssse3.cpp">
-      <Filter>Exporter</Filter>
-    </ClCompile>
     <ClCompile Include="..\nvEncode2\src\crepackyuv.cpp">
       <Filter>NVENC</Filter>
     </ClCompile>
@@ -52,272 +49,11 @@
     <ClCompile Include="Exporter\SDK_File_video.cpp">
       <Filter>Exporter</Filter>
     </ClCompile>
+    <ClCompile Include="..\nvEncode2\src\cpuid_ssse3.cpp">
+      <Filter>NVENC</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Premiere_SDK_Headers\AE_CacheOnLoadSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAcceleratedRender.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAcceleratedRenderInvocationSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKActivationEvent.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAESupport.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAlphaTypes.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAppInfoSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKApplicationSettingsSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAsyncFileReaderSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAsyncImporter.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAsyncOperationSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKAudioSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKCaptioningSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKClassData.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKClipRenderSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKDeferredProcessingSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKDevice.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKEffect.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKEntry.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKErrorSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExport.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportController.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportControllerSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExporterUtilitySuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportFileSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportInfoSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportParamSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportProgressSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKExportStdParamSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKFileRegistrationSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKFlashCueMarkerDataSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKImageProcessingSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKImport.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKImporterFileManagerSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKImporterShared.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKLegacySuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKMALErrors.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKMarkerSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKMediaAcceleratorSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKMemoryManagerSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPaletteSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPiPLVer.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPixelFormat.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPixelFormatSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModule.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleAudioSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleDeviceControlSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleOverlaySuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlayModuleRenderSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugMemory.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugPPix.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugSuites.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugTimeline.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugUtilities.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPlugWindow.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPix2Suite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixCacheSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixCreator2Suite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixCreatorSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKPPixSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKQuality.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKRecordModule.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKRenderCacheType.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKRollCrawlSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKSceneMetaData.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKScopeRenderSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKSequenceAudioSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKSequenceInfoSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKSequenceRenderSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKSetEnv.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKStockImageSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKStreamLabel.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKStreamLabelEffectSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKStringSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKStructs.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKThreadedWorkSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKTimeSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKTransmit.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKTransmitInvocationSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKTypes.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKVideoSegmentProperties.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKVideoSegmentRenderSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKVideoSegmentSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\PrSDKWindowSuite.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\SPBasic.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\SPConfig.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\SPErrorCodes.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Premiere_SDK_Headers\SPTypes.h">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </ClInclude>
     <ClInclude Include="..\nvEncode2\inc\CNVEncoder.h">
       <Filter>NVENC</Filter>
     </ClInclude>
@@ -432,9 +168,6 @@
     <ClInclude Include="..\core\threads\NvThreadingWin32.h">
       <Filter>NVENC_SDK</Filter>
     </ClInclude>
-    <ClInclude Include="Exporter\cpuid_ssse3.h">
-      <Filter>Exporter</Filter>
-    </ClInclude>
     <ClInclude Include="..\nvEncode2\nvapi\nvapi.h">
       <Filter>NVAPI</Filter>
     </ClInclude>
@@ -450,13 +183,13 @@
     <ClInclude Include="Exporter\SDK_File_video.h">
       <Filter>Exporter</Filter>
     </ClInclude>
+    <ClInclude Include="..\nvEncode2\inc\cpuid_ssse3.h">
+      <Filter>NVENC</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NVENC">
       <UniqueIdentifier>{83b808e1-41a0-4af5-a1a9-b3a09045d015}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Premiere_SDK_Headers">
-      <UniqueIdentifier>{393c8b58-cc5e-4c11-be8d-bd6041137d1a}</UniqueIdentifier>
     </Filter>
     <Filter Include="NVENC_SDK">
       <UniqueIdentifier>{127ea86c-117b-4b2d-934d-7828102533cb}</UniqueIdentifier>
@@ -467,10 +200,5 @@
     <Filter Include="NVAPI">
       <UniqueIdentifier>{9420c81c-4c26-4df7-b9a0-3e9ad447dfd9}</UniqueIdentifier>
     </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Premiere_SDK_Headers\PrSDKPiPL.r">
-      <Filter>Premiere_SDK_Headers</Filter>
-    </None>
   </ItemGroup>
 </Project>

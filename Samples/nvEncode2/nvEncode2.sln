@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nvenc_export", "nvEncode2.vcxproj", "{CD8DB66A-439B-4E02-8562-1642E810D5C0}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nvEncode2", "nvEncode2.vcxproj", "{CD8DB66A-439B-4E02-8562-1642E810D5C0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

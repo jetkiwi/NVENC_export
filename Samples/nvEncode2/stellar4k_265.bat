@@ -27,7 +27,7 @@ x64\Debug\nvEncode2.exe ^
  -rcmode=32 ^
  -kbitrate=15000 ^
  -maxkbitrate=80000 ^
- -preset=4 ^
+ -preset=3 ^
  -num_b_frames=0 ^
  -goplength=24 ^
  -sliceMode=3 ^

@@ -64,7 +64,7 @@
 #include <MMReg.h> // for GUID KSDATAFORMAT_SUBTYPE_PCM, WAVE_FORMAT_EXTENSIBLE
 
 #ifndef SDK_FILE_CURRENT_VERSION	
-#define SDK_FILE_CURRENT_VERSION	37			// The current file version number. When making a change
+#define SDK_FILE_CURRENT_VERSION	39			// The current file version number. When making a change
 												// to the file structure, increment this value.
 #endif
 
@@ -86,13 +86,12 @@
 //#define SDK_FILE_TYPE_WAV			'WAVE'		// file extension for pcm (audio) output
 
 // Display strings for menus
-#define SDK_FILE_NAME				L"NVENC_export"
 #define EXPORTER_PLUGIN_NAME		SDK_FILE_NAME
 #define SDK_8_BIT_RGB_NAME			L"Uncompressed 8-bit RGB"
 #define SDK_10_BIT_YUV_NAME			L"Uncompressed 10-bit YUV (v410)"
 #define	SDK_RLE_NAME				L"RLE Compressed 8-bit RGB"
 
-#define	SDK_NAME					"NVidia NVENC SDK 5.0 (Dec 2014) Exporter"	// This string is used in the file header
+#define	SDK_NAME					"NVidia NVENC SDK 6.0 (Dec 2015) Exporter"	// This string is used in the file header
 #define	SDK_CLSS					'DTEK'		// ClassID four character code, used in the Editing Mode XML
 
 // Codec (subtype) fourCCs

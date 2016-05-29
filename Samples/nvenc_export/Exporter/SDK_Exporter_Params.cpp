@@ -150,9 +150,11 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYX_4444_8u_709), // 32bpp packed-pixel (4:4:4)
 		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u_709),
 		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYX_4444_8u),
-		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u)
-//		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRX_4444_8u), // fallback, if YUV-output isn't supported
-//		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRA_4444_8u)
+		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRX_4444_8u), // fallback, if YUV-output isn't supported
+		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRA_4444_8u),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRX_4444_32f),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRA_4444_32f)
 	};
 
 	const cls_convert_guid desc_PrPixelFormat = cls_convert_guid(
@@ -211,6 +213,20 @@ PrPixelFormat_is_YUV444( const PrPixelFormat p )
 	return false;
 }
 
+bool
+PrPixelFormat_is_RGB32f(const PrPixelFormat p)
+{
+	// returns: true if 'p' is a Yuv444 32bpp packed-pixel format
+	switch (p) {
+	case PrPixelFormat_BGRA_4444_32f:
+	case PrPixelFormat_BGRX_4444_32f:
+		return true;
+		break;
+	}
+
+	return false;
+}
+
 void
 NVENC_GetEncoderCaps(const NvEncodeCompressionStd codec, const nv_enc_caps_s &caps, string &s)
 {
@@ -262,10 +278,12 @@ NVENC_GetEncoderCaps(const NvEncodeCompressionStd codec, const nv_enc_caps_s &ca
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_PREPROC_SUPPORT);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
-	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_NUM_MAX); // broken in 320.79 driver, works in 334.89 WHQL driver (fixed in later drivers)
-	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_PER_SEC_MAX); // broken in 320.79 driver, works in 334.89 WHQL driver (...)
+	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_NUM_MAX);
+	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_PER_SEC_MAX);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE); 
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE);
+	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_SAO);         // NVENC 6.0
+	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_MEONLY_MODE); // NVENC 6.0
 /*
 	for(unsigned i = 0; i < m_dwInputFmtCount; ++i ) {
 		string s;
@@ -342,7 +360,8 @@ uint32_t NVENC_Calculate_H264_MaxKBitRate(
 			case NV_ENC_LEVEL_H264_42 : return 50000;
 			case NV_ENC_LEVEL_H264_5  : return 135000;
 			case NV_ENC_LEVEL_H264_51 : return 240000;
-		    default              : return 0; // unconstrained
+			case NV_ENC_LEVEL_H264_52 : return 240000;
+		    default                   : return 0; // unconstrained
 		}
 
 	if ( (profile >= NV_ENC_H264_PROFILE_HIGH) &&
@@ -364,7 +383,8 @@ uint32_t NVENC_Calculate_H264_MaxKBitRate(
 			case NV_ENC_LEVEL_H264_42 : return 60000;// should be 62500
 			case NV_ENC_LEVEL_H264_5  : return 160000;// should be 168750
 			case NV_ENC_LEVEL_H264_51 : return 280000;// should be 300000
-		    default              : return 0; // unconstrained
+			case NV_ENC_LEVEL_H264_52 : return 280000;// should be 300000
+			default                   : return 0; // unconstrained
 		}
 
 	return 0; // unconstrained
@@ -645,9 +665,6 @@ prMALError exSDKGenerateDefaultParams(
 							seqSampleRate;
 	prUTF16Char				tempString[256];
 	exNewParamInfo			Param;
-	s_cpuid_info			cpuid_info;
-	
-	get_cpuinfo_has_ssse3( &cpuid_info );// get CPU information (do we support SSSE3?)
 
 	if( exportInfoSuite == NULL) {
 		return malUnknownError;
@@ -773,6 +790,9 @@ prMALError exSDKGenerateDefaultParams(
 #define Add_NVENC_Param_bool( group, name, dflt ) \
 	Add_NVENC_Param( exParamType_bool, intValue, exParamFlag_none, group, name, 0, 1, dflt, kPrFalse, kPrFalse )
 
+#define Add_NVENC_Param_bool_dh( group, name, dflt, _disabled, _hidden ) \
+	Add_NVENC_Param( exParamType_bool, intValue, exParamFlag_none, group, name, 0, 1, dflt, _disabled, _hidden )
+
 #define Add_NVENC_Param_int_slider_dh( group, name, min, max, dflt, _disabled, _hidden ) \
 	Add_NVENC_Param( exParamType_int, intValue, exParamFlag_slider, group, name, min, max, dflt, _disabled, _hidden )
 
@@ -876,6 +896,9 @@ prMALError exSDKGenerateDefaultParams(
 	const bool res2160p_or_less2 = (seqWidth.mInt32 * seqHeight.mInt32) <= (4096 * 2160);
 
 	unsigned dflt_nv_enc_level_h264, dflt_nv_enc_level_hevc;
+	dflt_nv_enc_level_h264 = NV_ENC_LEVEL_AUTOSELECT;
+	dflt_nv_enc_level_hevc = NV_ENC_LEVEL_AUTOSELECT;
+	/*
 	if ( (seqWidth.mInt32 * seqHeight.mInt32) <= (720*576) )
 		dflt_nv_enc_level_h264 = NV_ENC_LEVEL_H264_31;
 	else if ((seqWidth.mInt32 * seqHeight.mInt32) <= (1280*720) )
@@ -903,7 +926,7 @@ prMALError exSDKGenerateDefaultParams(
 		dflt_nv_enc_level_hevc = NV_ENC_LEVEL_HEVC_52;
 	else
 		dflt_nv_enc_level_hevc = NV_ENC_LEVEL_HEVC_6;
-
+*/
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_LEVEL_H264, 0, MAX_POSITIVE, dflt_nv_enc_level_h264)
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_LEVEL_HEVC, 0, MAX_POSITIVE, dflt_nv_enc_level_hevc)
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_TIER_HEVC, 0, MAX_POSITIVE, NV_ENC_TIER_HEVC_HIGH)
@@ -998,8 +1021,8 @@ prMALError exSDKGenerateDefaultParams(
 	
 //    unsigned int              vbvBufferSize;
 //    unsigned int              vbvInitialDelay;
-	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_vbvBufferSize, 0, MAX_POSITIVE, 0)
-	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_vbvInitialDelay, 0, MAX_POSITIVE, 0)
+	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_vbvBufferSize, 0, MAX_POSITIVE, 0)
+	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_vbvInitialDelay, 0, MAX_POSITIVE, 0)
 
 //    NV_ENC_H264_FMO_MODE      enableFMO;   // flexible macroblock ordering (Baseline profile)
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_H264_FMO, 0, MAX_POSITIVE, NV_ENC_H264_FMO_AUTOSELECT)
@@ -1037,7 +1060,7 @@ prMALError exSDKGenerateDefaultParams(
 //    unsigned int              report_slice_offsets;
 //    unsigned int              enableSubFrameWrite;
 //    unsigned int              disableDeblock;
-	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_disableDeblock, 0, 2, 0)
+	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_disableDeblock, 0, 2, 0)
 
 //    unsigned int              disable_ptd;
 
@@ -1074,11 +1097,27 @@ prMALError exSDKGenerateDefaultParams(
 	// Codec
 	// this param was leftover from the SDK sample code, don't need it anymore
 	//Add_NVENC_Param_int( ADBEVideoCodecGroup, ADBEVideoCodec, 0, 0, SDK_8_BIT_RGB)
+	const prBool disable_ssse3 = get_cpuinfo_has_ssse3() ? kPrFalse : kPrTrue;
+	const prBool disable_avx   = get_cpuinfo_has_avx()   ? kPrFalse : kPrTrue;
+	const prBool disable_avx2  = get_cpuinfo_has_avx2()  ? kPrFalse : kPrTrue;
+	const prBool dflt_avx      = get_cpuinfo_has_avx()   ? kPrTrue  : kPrFalse;
+	const prBool dflt_avx2     = get_cpuinfo_has_avx2()  ? kPrTrue  : kPrFalse;
+
+	Add_NVENC_Param_int(ADBEVideoCodecGroup, ParamID_VideoCodec_CPU_Report_CAP, 0, MAX_POSITIVE, 0)
+
+	Add_NVENC_Param_bool_dh(ADBEVideoCodecGroup, ParamID_VideoCodec_CPU_EnableAVX, 
+		dflt_avx, disable_avx, false
+	)
+	Add_NVENC_Param_bool_dh(ADBEVideoCodecGroup, ParamID_VideoCodec_CPU_EnableAVX2,
+		dflt_avx2, disable_avx2, false
+	)
 
 	// Button: 'codec info' 
 	Add_NVENC_Param_button( ADBEVideoCodecGroup, ADBEVideoCodecPrefsButton, exParamFlag_none );
 
-	// Basic Video Param Group
+///////////////////////////////////////////////////////////////////////////////
+// Basic Video Param Group
+///////////////////////////////////////////////////////////////////////////////
 	Add_NVENC_Param_Group( ADBEBasicVideoGroup, GroupName_BasicVideo, ADBEVideoTabGroup );
 
 	// Broadcast standard (NTSC, PAL, SECAM) 
@@ -1171,7 +1210,7 @@ prMALError exSDKGenerateDefaultParams(
 	if ( seqChannelType.mInt32 >= kPrAudioChannelType_16Channel )
 		seqChannelType.mInt32 = kPrAudioChannelType_51;
 	// kludge2 - if we don't support SSSE3, then disable kPrAudioChannelType_51
-	if ( seqChannelType.mInt32 == kPrAudioChannelType_51 && !cpuid_info.bSupplementalSSE3 )
+	if ( seqChannelType.mInt32 == kPrAudioChannelType_51 && !get_cpuinfo_has_ssse3() )
 		seqChannelType.mInt32 = kPrAudioChannelType_Stereo;
 	Add_NVENC_Param_int( ADBEBasicAudioGroup, ADBEAudioNumChannels, 0, MAX_POSITIVE, seqChannelType.mInt32)
 
@@ -1956,11 +1995,12 @@ update_exportParamSuite_NVENCCfgGroup(
 		&exParamValue_temp);
 	if ( codec_is_h264 ) {
 		// validate the chromaformat: if necessary, force it back to NV12
-
 		cudaVideoChromaFormat chromafmt = static_cast<cudaVideoChromaFormat>(exParamValue_temp.value.intValue);
+
 		if ((chromafmt != cudaVideoChromaFormat_420) && ((profileValue < NV_ENC_H264_PROFILE_HIGH_444) ||
 			!nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_YUV444_ENCODE) )
 		{
+			// force it to NV12 (cudaVideoChromaFormat_420)
 			exParamValue_temp.value.intValue = enc->m_pAvailableSurfaceFmts[0];
 			lRec->exportParamSuite->ChangeParam(exID,
 				0,
@@ -2135,11 +2175,11 @@ update_exportParamSuite_NVENCCfgGroup(
 	// VBV bufferSize - DEFAULT == 0 (auto)
 	//    hidden if nv_enc_caps doesn't support adjustable VBV
 	prBool hide_vbv = nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE ? kPrFalse : kPrTrue;
-	_UpdateIntSliderParam( ParamID_vbvBufferSize, 0, 999, hide_vbv, kPrFalse );
+	_UpdateIntSliderParam( ParamID_vbvBufferSize, 0, MAX_POSITIVE, hide_vbv, kPrFalse );
 
 	// VBV initialDelay - DEFAULT == 0 (auto)
 	//    hidden if nv_enc_caps doesn't support adjustable VBV
-	_UpdateIntSliderParam( ParamID_vbvInitialDelay, 0, 999, hide_vbv, kPrFalse );
+	_UpdateIntSliderParam( ParamID_vbvInitialDelay, 0, MAX_POSITIVE, hide_vbv, kPrFalse );
 
 	////////////////////////////
 
@@ -2324,6 +2364,10 @@ update_exportParamSuite_NVENCCfgGroup(
 	);
 
 	////////////////////////////
+	
+	lRec->exportParamSuite->ClearConstrainedValues(exID,
+		0,
+		ParamID_chromaFormatIDC);
 
 	bool already_added_420 = false;
 	bool already_added_444 = false;
@@ -2333,13 +2377,21 @@ update_exportParamSuite_NVENCCfgGroup(
 			val = enc->m_pAvailableSurfaceFmts[i];
 			NV_ENC_BUFFER_FORMAT bufferfmt = static_cast<NV_ENC_BUFFER_FORMAT>(val);
 
-			if ( IsYV12Format(bufferfmt) || IsNV12Format(bufferfmt) ) {
+			if ( IsNV12Format(bufferfmt) ) {
 				if (already_added_420)
-					continue; // kludge for HEVC: don't add multiple 420 entries
+					continue; // kludge: don't add multiple 420 entries
 				// type-convert from <NV_ENC_BUFFER_FORMAT> into <cudaVideoChromaFormat>
 				val = cudaVideoChromaFormat_420;
-				already_added_420 = true;
+				already_added_420 = true; // kludge for HEVC: don't add multiple 420 entries
+
+				// remap item's name from the NV_ENC_BUFFER_FORMAT -> cudaVideoChromaFormat
+				desc_cudaVideoChromaFormat_names.value2string(val, s);
+				_AddConstrainedIntValuePair(ParamID_chromaFormatIDC)
 			}
+
+			// Don't support NV_ENC_BUFFER_FORMAT "YV12" or "IYUV", since they're
+			// slower than NV12.  We also assume all NVENC capable hardware supports
+			// NV12.
 
 			if ( IsYUV444Format(bufferfmt) )
 			{
@@ -2350,16 +2402,17 @@ update_exportParamSuite_NVENCCfgGroup(
 					continue; // ... and the Hi444 profile must be selected
 
 				if (already_added_444)
-					continue; // kludge for HEVC: don't add multiple 420 entries
+					continue;
 
 				// type-convert from <NV_ENC_BUFFER_FORMAT> into <cudaVideoChromaFormat>
 				val = cudaVideoChromaFormat_444;
 				already_added_444 = true;
+
+				// remap item's name from the NV_ENC_BUFFER_FORMAT -> cudaVideoChromaFormat
+				desc_cudaVideoChromaFormat_names.value2string(val, s);
+				_AddConstrainedIntValuePair(ParamID_chromaFormatIDC)
 			}
 
-			// remap item's name from the NV_ENC_BUFFER_FORMAT -> cudaVideoChromaFormat
-			desc_cudaVideoChromaFormat_names.value2string(val, s);
-			_AddConstrainedIntValuePair(ParamID_chromaFormatIDC)
 		}
 	}
 
@@ -2382,6 +2435,10 @@ update_exportParamSuite_NVENCCfgGroup(
 		codec_is_h264 ? kPrFalse : kPrTrue,
 		codec_is_h264 ? kPrFalse : kPrTrue
 	);
+
+	////////////////////////////
+
+	_UpdateIntParam(ParamID_disableDeblock, 0, 2, kPrFalse, kPrFalse);
 
 	////////////////////////////
 
@@ -2576,7 +2633,7 @@ update_exportParamSuite_VideoGroup(
 	max_bitrate /= 1000.0; // convert Kilobps into Megabps
 
 	// check for unconstrained bitrate
-	if ( codec_is_h264 && (max_bitrate == 0))
+	if ( max_bitrate == 0)
 		max_bitrate = 240.0; // unconstrained bitrate: cap it @ 240 Mbps
 
 	_UpdateFloatSliderParam( ADBEVideoMaxBitrate, 1, max_bitrate, kPrFalse, maxbitrate_hidden );
@@ -2611,14 +2668,15 @@ update_exportParamSuite_VideoGroup(
 		val = i;
 		desc_PrPixelFormat.index2string(i, s);
 		desc_PrPixelFormat.index2value(i, pp);
+		const PrPixelFormat pf = static_cast<PrPixelFormat>(pp);
 
-		// If user has chosen YUV444, then only list YUV444 pixelFormats
-		if ( user_444 && !PrPixelFormat_is_YUV444( static_cast<PrPixelFormat>(pp) ) )
+		// If user has chosen YUV444, then only allow pixelFormats YUV444 and RGB32f
+		if ( user_444 && !PrPixelFormat_is_YUV444(pf) && !PrPixelFormat_is_RGB32f(pf) )
 			continue;
 
-		// If user has chosen YUV420, then only list YUV420 and YUV422 pixelFormats
-		if ( user_420 && !(PrPixelFormat_is_YUV420( static_cast<PrPixelFormat>(pp)) ||
-			PrPixelFormat_is_YUV422( static_cast<PrPixelFormat>(pp))) )
+		// If user has chosen YUV420, then only allow YUV420, YUV422, and RGB32f
+		if ( user_420 && !PrPixelFormat_is_RGB32f(pf) &&
+			!(PrPixelFormat_is_YUV420(pf) || PrPixelFormat_is_YUV422(pf)) )
 			continue;
 		_AddConstrainedIntValuePair(ParamID_forced_PrPixelFormat)
 	}
@@ -2760,6 +2818,56 @@ update_exportParamSuite_BasicAudioGroup(
 	_UpdateIntSliderParam(ADBEAudioBitrate, new_min, new_max, kPrFalse, aac_hidden );
 }
 
+void
+update_exportParamSuite_VideoCodecGroup( // Host CPU capabilities, Codecinfo button
+	const csSDK_uint32 exID,
+	ExportSettings *lRec
+) {
+		PrSDKExportParamSuite	*paramSuite	= lRec->exportParamSuite;
+	exParamValues			exParamValue_temp;
+	exOneParamValueRec      exOneParamValue_temp;
+	int32_t					audioCodec;
+	int32_t					audioChannels;
+	csSDK_int32				new_min, new_max;
+	csSDK_int32		mgroupIndex = 0;
+	prUTF16Char				tempString[256];
+
+	if ( paramSuite == NULL ) // TODO trap error
+		return;
+
+	const prBool disable_ssse3 = get_cpuinfo_has_ssse3() ? kPrFalse : kPrTrue;
+	const prBool disable_avx = get_cpuinfo_has_avx() ? kPrFalse : kPrTrue;
+	const prBool disable_avx2 = get_cpuinfo_has_avx2() ? kPrFalse : kPrTrue;
+
+	lRec->exportParamSuite->ClearConstrainedValues(exID,
+		0,
+		ParamID_VideoCodec_CPU_Report_CAP
+	);
+	// convert <major>.<minor> into a wchar_t[] text-string, then to tempString[]>
+	std::wostringstream oss; // output stream for wide-text conversion
+	if (get_cpuinfo_has_ssse3()) {
+		oss << "SSSE3 ";
+		if (get_cpuinfo_has_avx())
+			oss << "AVX ";
+		if (get_cpuinfo_has_avx2())
+			oss << "AVX2 ";
+	}
+	else {
+		oss << "SSSE3 is not supprted! (NVENC not supported)";
+	}
+
+	copyConvertStringLiteralIntoUTF16(oss.str().c_str(), tempString);
+
+	exOneParamValue_temp.intValue = 0;
+	lRec->exportParamSuite->AddConstrainedValuePair(exID,
+		0,
+		ParamID_VideoCodec_CPU_Report_CAP,
+		&exOneParamValue_temp,
+		tempString);
+
+	_UpdateParam_dh(ParamID_VideoCodec_CPU_EnableAVX, disable_avx, kPrFalse);
+	_UpdateParam_dh(ParamID_VideoCodec_CPU_EnableAVX2, disable_avx2, kPrFalse);
+}
 /*
 void
 update_exportParamSuite_NVENCCfgGroup_ratecontrol_names(
@@ -2938,10 +3046,6 @@ prMALError exSDKPostProcessParams (
 
 	prUTF16Char				tempString[256];
 	exOneParamValueRec		tempSampleRate;
-	s_cpuid_info			cpuid_info;
-
-	// get CPUID information (to determine if CPU supports SSSE3 for audio-5.1 processing)
-	get_cpuinfo_has_ssse3(&cpuid_info);
 
 	lRec->timeSuite->GetTicksPerSecond (&ticksPerSecond);
 	for (csSDK_int32 i = 0; i < sizeof(frameRates) / sizeof (PrTime); i++)
@@ -3043,6 +3147,7 @@ YUV420_601  (4:2:0 Bt601)\n\
 YUYV422_601 (4:2:2 Bt601)\n\
 YUYV422_709 (4:2:2 Bt709)\n\
 VUYA_709    (4:4:4 Bt709)\n\
+RGB444      (converted to Bt709 4:2:0/4:4:4 as needed)\n\
 \n\
 Regarding pixelformats, there are 2 separate things to consider:\n\
 First is color-timing: example Bt601 vs Bt709.  If any segment of\n\
@@ -3070,6 +3175,10 @@ refuses to output Planar_420.\n\
 Recommendation: If you encounter errors during export, force the\n\
 pixelformat to 422 accelerated flow will not output Planar_420\n\
 if a CUDA-accelerated effect is used anywhere throughout the video.\n\
+Alternatively, you can request RGB-video, which nvenc_export converts\n\
+into limited-scale Bt709 YUV.  The color-conversion is done in software\n\
+on the host-CPU (no HW acceleration), so RGB should only be used if no\n\
+other format works.\
 " );
 
 	////////////
@@ -3526,6 +3635,25 @@ If encoding H264, all 3 types of muxers should function properly.\
 	NVENC_SetParamName(lRec, exID, ParamID_BasicMux_MKVMERGE_Button,
 		L"MKVMERGE_Button", L"Click <Button> to specify path to MKVMERGE.EXE");
 
+	NVENC_SetParamName(lRec, exID, ParamID_VideoCodec_CPU_Report_CAP,
+		LParamID_VideoCodec_CPU_Report_CAP, L"Host CPU capabilities\n\
+Only capabilities used by nvenc_export are reported:\n\
+SSSE3 = baseline (required)\n\
+AVX   = reduces CPU-overhead for RGB->YUV conversion\n\
+AVX2  = reduces CPU-overhead for all format conversion\
+");
+
+	NVENC_SetParamName(lRec, exID, ParamID_VideoCodec_CPU_EnableAVX,
+		LParamID_VideoCodec_CPU_EnableAVX, L"Allow nvenc_export to use AVX.\n\
+(This option is only enabled if CPU supports AVX.)\n\
+ Requires: Intel Sandy Bridge (2011) or later CPU\
+");
+
+	NVENC_SetParamName(lRec, exID, ParamID_VideoCodec_CPU_EnableAVX2,
+		LParamID_VideoCodec_CPU_EnableAVX2, L"Allow nvenc_export to use AVX2.\n\
+(This option is only enabled if CPU supports AVX2.)\n\
+ Requires: Intel Haswell (2013) or later CPU\
+");
 	//
 	// Update the GroupID_NVENCCfg
 	//
@@ -3636,7 +3764,7 @@ If encoding H264, all 3 types of muxers should function properly.\
 	{
 		// if CPU doesn't support SSSE3, then don't allow 5.1-audio because the
 		// channel-reordering function uses SSSE3 instructinos
-		if ( channelTypes[i] == kPrAudioChannelType_51 && !cpuid_info.bSupplementalSSE3 ) 
+		if ( channelTypes[i] == kPrAudioChannelType_51 && !get_cpuinfo_has_ssse3() ) 
 			continue;// cpu doesn't support SSSE3, so disable NVENC's support for 5.1-audio
 		else if ( channelTypes[i] > kPrAudioChannelType_51 ) 
 			continue;// NVENC plugin doesn't support more than 6-channel surround
@@ -3661,11 +3789,15 @@ If encoding H264, all 3 types of muxers should function properly.\
 	//
 	update_exportParamSuite_VideoGroup( exID, lRec );
 
+	//
+	// Video Codec Group (host cpu capabilities, enable avx/avx2)
+	//
 	lRec->exportParamSuite->GetArbData(	exID,
 										0,
 										ADBEVideoCodecPrefsButton,
 										&codecSettingsSize,
 										NULL);
+	update_exportParamSuite_VideoCodecGroup( exID, lRec );
 
 	if (codecSettingsSize)
 	{
@@ -4310,6 +4442,10 @@ exSDKValidateParamChanged (
 			update_exportParamSuite_BasicAudioGroup(exID, lRec);
 		}
 	}
+	else if (strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_VideoCodec_CPU_EnableAVX) == 0 ||
+		strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_VideoCodec_CPU_EnableAVX2) == 0) {
+		update_exportParamSuite_VideoCodecGroup(exID, lRec);
+	}
 
 	// copy the Ppro plugin settings into lRec.NvEncodeConfig
 	NVENC_ExportSettings_to_EncodeConfig( exID, lRec );
@@ -4371,6 +4507,22 @@ exSDKValidateOutputSettings( // used by selector exSelValidateOutputSettings
 								EXPORTER_NAME_W,
 								MB_OK | MB_ICONERROR );
 		return exportReturn_ErrLastErrorSet; // NVENC not supported on this hardware
+	}
+	if ((validateOutputSettingsRec->fileType == SDK_FILE_TYPE_M4V) && !get_cpuinfo_has_ssse3()) {
+		wostringstream oss; // text scratchpad for messagebox and errormsg 
+		copyConvertStringLiteralIntoUTF16(L"NVENC-export error", title);
+		oss << "!!! NVENC_EXPORT error, host-CPU does not have SSSE3 capability!!!" << endl << endl;
+		oss << "  Reason: nvenc_export cannot run without SSSE3 capability!" << endl;
+		oss << "Solution: Upgrade to a newer CPU!" << endl;
+
+		copyConvertStringLiteralIntoUTF16(L"Cannot export because the host-CPU does not have SSSE3 capability!", desc);
+		privateData->errorSuite->SetEventStringUnicode(PrSDKErrorSuite::kEventTypeError, title, desc);
+
+		MessageBoxW(GetLastActivePopup(mainWnd),
+			oss.str().c_str(),
+			EXPORTER_NAME_W,
+			MB_OK | MB_ICONERROR);
+		return exportReturn_ErrLastErrorSet; // nvenc_export cannot run on this CPU
 	}
 	
 	// if Multiplxer is set to *.TS output (mpeg-2 transport stream), then 
@@ -4465,8 +4617,9 @@ exSDKValidateOutputSettings( // used by selector exSelValidateOutputSettings
 	//    verify NEROAACENC.EXE path is valid
 
 	paramSuite->GetParamValue( exID, mgroupIndex, ADBEAudioCodec, &exParamValue);
+	const csSDK_int32 audio_codec = exParamValue.value.intValue;
 	//if ( privateData->SDKFileRec.hasAudio && exParamValue.value.intValue == ADBEAudioCodec_AAC ) {
-	if ( exParamValue.value.intValue == ADBEAudioCodec_AAC ) {
+	if ( audio_codec == ADBEAudioCodec_AAC ) {
 	//if ( outputSettingsRec.inExportAudio && exParamValue.value.intValue == ADBEAudioCodec_AAC ) {
 		paramSuite->GetParamValue( exID, mgroupIndex, ParamID_AudioFormat_NEROAAC_Path, &exParamValue);
 		wchar_t parent_executable[ MAX_PATH ];
@@ -4492,6 +4645,32 @@ exSDKValidateOutputSettings( // used by selector exSelValidateOutputSettings
 
 			return exportReturn_ErrLastErrorSet; // NVENC is supported
 		}
+	}
+
+	paramSuite->GetParamValue(exID, mgroupIndex, ADBEAudioRatePerSecond, &exParamValue);
+	const bool audio_is_441k = (exParamValue.value.floatValue >= 44099) &&
+		(exParamValue.value.floatValue <= 44101);
+
+	// TSMuxer does not support LPCM 44.1KHz audio
+	if ((muxType == MUX_MODE_M2T) && (audio_codec == ADBEAudioCodec_PCM) && 
+		audio_is_441k)  {
+		wostringstream oss; // text scratchpad for messagebox and errormsg 
+
+		// ERROR
+		oss << "!!! NVENC_EXPORT error, can not confirm user settings !!!" << endl << endl;
+		oss << "  Reason: TSMUXER does not support 44.1KHz LPCM audio" << endl << endl;
+		oss << "Solution: Either change the audiorate to 48KHz, or audiocodec to AAC" << endl;
+
+		copyConvertStringLiteralIntoUTF16(L"NVENC-export error", title);
+		copyConvertStringLiteralIntoUTF16(oss.str().c_str(), desc);
+		privateData->errorSuite->SetEventStringUnicode(PrSDKErrorSuite::kEventTypeError, title, desc);
+
+		MessageBoxW(GetLastActivePopup(mainWnd),
+			oss.str().c_str(),
+			EXPORTER_NAME_W,
+			MB_OK | MB_ICONERROR);
+
+		return exportReturn_ErrLastErrorSet; // NVENC is supported
 	}
 
 	return malNoError; // NVENC is supported
@@ -4666,6 +4845,12 @@ NVENC_ExportSettings_to_EncodeConfig(
 		false;
 	desc_PrPixelFormat.index2value( paramValue.value.intValue, requested_PixelFormat0 );
 	lRec->requested_PixelFormat0 = static_cast<PrPixelFormat>(requested_PixelFormat0);
+
+	//
+	// CPU-capability flags
+	//
+	_AdobeParamToEncodeConfig(ParamID_VideoCodec_CPU_EnableAVX, intValue, CPU_enableAVX, int);
+	_AdobeParamToEncodeConfig(ParamID_VideoCodec_CPU_EnableAVX2, intValue, CPU_enableAVX2, int);
 
 	return S_OK;
 }

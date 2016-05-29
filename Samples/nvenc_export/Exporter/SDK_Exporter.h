@@ -21,7 +21,7 @@
 #ifndef SDK_EXPORTER_H
 #define SDK_EXPORTER_H
 
-#define SDK_FILE_NAME			L"NVENC_export"
+#define SDK_FILE_NAME			L"NVENC_export 1.11"
 
 #include	<PrSDKMarkerSuite.h>
 #include	<PrSDKErrorSuite.h>

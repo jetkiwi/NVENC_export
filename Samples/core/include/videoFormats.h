@@ -64,30 +64,6 @@ inline bool IsNV12PLFormat(NV_ENC_BUFFER_FORMAT dwFormat)
     }
 }
 
-inline bool IsNV12Tiled16x16Format(NV_ENC_BUFFER_FORMAT dwFormat)
-{
-    if (dwFormat == NV_ENC_BUFFER_FORMAT_NV12_TILED16x16)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-inline bool IsNV12Tiled64x16Format(NV_ENC_BUFFER_FORMAT dwFormat)
-{
-    if (dwFormat == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
 inline bool IsYUV444PLFormat(NV_ENC_BUFFER_FORMAT dwFormat)
 {
     if (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_PL)
@@ -100,34 +76,9 @@ inline bool IsYUV444PLFormat(NV_ENC_BUFFER_FORMAT dwFormat)
     }
 }
 
-inline bool IsYUV444Tiled16x16Format(NV_ENC_BUFFER_FORMAT dwFormat)
-{
-    if (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_TILED16x16) 
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-inline bool IsYUV444Tiled64x16Format(NV_ENC_BUFFER_FORMAT dwFormat)
-{
-    if (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
 inline bool IsNV12Format(NV_ENC_BUFFER_FORMAT dwFormat)
 {
-   if ((dwFormat == NV_ENC_BUFFER_FORMAT_NV12_PL) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_NV12_TILED16x16) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16))
+   if (dwFormat == NV_ENC_BUFFER_FORMAT_NV12_PL)
    {
        return true;
    }
@@ -137,9 +88,7 @@ inline bool IsNV12Format(NV_ENC_BUFFER_FORMAT dwFormat)
 
 inline bool IsYV12Format(NV_ENC_BUFFER_FORMAT dwFormat)
 {
-   if ((dwFormat == NV_ENC_BUFFER_FORMAT_YV12_PL) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_YV12_TILED16x16) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_YV12_TILED64x16))
+   if (dwFormat == NV_ENC_BUFFER_FORMAT_YV12_PL)
    {
        return true;
    }
@@ -149,9 +98,7 @@ inline bool IsYV12Format(NV_ENC_BUFFER_FORMAT dwFormat)
 
 inline bool IsYUV444Format(NV_ENC_BUFFER_FORMAT dwFormat)
 {
-   if ((dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_PL) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_TILED16x16) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16))
+   if (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_PL)
    {
        return true;
    }
@@ -159,19 +106,6 @@ inline bool IsYUV444Format(NV_ENC_BUFFER_FORMAT dwFormat)
        return false;
 }
 
-inline bool IsTiled16x16Format(NV_ENC_BUFFER_FORMAT dwFormat)
-{
-   if ((dwFormat == NV_ENC_BUFFER_FORMAT_NV12_TILED16x16) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_YV12_TILED16x16) ||
-       (dwFormat == NV_ENC_BUFFER_FORMAT_IYUV_TILED16x16))
-   {
-       return true;
-   }
-   else
-   {
-       return false;
-   }
-}
 
 inline void CvtToTiled16x16(unsigned char *tile, unsigned char *src, 
                             unsigned int width, unsigned int height, 
@@ -215,38 +149,6 @@ inline void getTiled16x16Sizes( int width, int height, bool frame , int &luma_si
    }    
 }
 
-inline void convertYUVpitchtoNV12tiled16x16( unsigned char *yuv_luma, unsigned char *yuv_cb, unsigned char *yuv_cr,
-                                            unsigned char *tiled_luma, unsigned char *tiled_chroma,
-                                            int width, int height, int srcStride, int dstStride )
-{
-    int tileNb, offs;
-    int x,y;
-
-    if(srcStride<0) srcStride = width;
-    if(dstStride<0) dstStride = width;
-
-    for (  y = 0 ; y < height ; y++){
-        for ( x= 0 ; x < width; x++){
-             tileNb = x/16 + (y/16) * dstStride/16;
-
-             offs = tileNb * 256;
-             offs += (y % 16) * 16 + (x % 16);
-             tiled_luma[offs]   =  yuv_luma[(srcStride*y) + x];
-        }
-    }
-
-    for (  y = 0 ; y < height/2 ; y++){
-        for ( x= 0 ; x < width; x = x+2 ){
-            tileNb = x/16 + (y/16) * dstStride/16;
-
-            offs = tileNb * 256;
-            offs += (y % 16) * 16 + (x % 16);
-            tiled_chroma[offs]   =  yuv_cb[(srcStride/2)*y + x/2];
-            tiled_chroma[offs+1] =  yuv_cr[(srcStride/2)*y + x/2];
-        }
-    }
-}
-
 inline void convertYUVpitchtoNV12( unsigned char *yuv_luma, unsigned char *yuv_cb, unsigned char *yuv_cr,
                             unsigned char *nv12_luma, unsigned char *nv12_chroma,
                             int width, int height , int srcStride, int dstStride)
@@ -273,30 +175,6 @@ inline void convertYUVpitchtoNV12( unsigned char *yuv_luma, unsigned char *yuv_c
     }
 }
 
-inline
-void convertYUVpitchtoYUV444tiled16x16(unsigned char *yuv_luma, unsigned char *yuv_cb, unsigned char *yuv_cr,
-                                       unsigned char *tiled_luma, unsigned char *tiled_cb, unsigned char *tiled_cr,
-                                       int width, int height, int srcStride, int dstStride )
-{
-    int tileNb, offs;
-    int x,y;
-
-    if(srcStride<0) srcStride = width;
-    if(dstStride<0) dstStride = width;
-
-    for (y = 0; y < height; y++)
-    {
-        for (x = 0; x < width; x++)
-        {
-             tileNb = x/16 + (y/16) * dstStride/16;
-             offs = tileNb * 256;
-             offs += (y % 16) * 16 + (x % 16);
-             tiled_luma[offs]   =  yuv_luma[(srcStride*y) + x];
-             tiled_cb  [offs]   =  yuv_cb  [(srcStride*y) + x];
-             tiled_cr  [offs]   =  yuv_cr  [(srcStride*y) + x];
-        }
-    }
-}
 
 inline
 void convertYUVpitchtoYUV444(unsigned char *yuv_luma, unsigned char *yuv_cb, unsigned char *yuv_cr,

@@ -33,18 +33,18 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v110</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v110</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
-    <PlatformToolset>v110</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -104,13 +104,14 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;../../common/inc</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;../../common/inc;$(CUDA_PATH)/include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <AdditionalDependencies>nvapi.lib;cuda.lib;nvcuvid.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -130,13 +131,14 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;;$(CUDA_PATH)/include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <AdditionalDependencies>cuda.lib;nvcuvid.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;nvapi64.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -152,11 +154,12 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;;$(CUDA_PATH)/include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <AdditionalDependencies>nvapi.lib;cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -177,11 +180,12 @@
       <TargetEnvironment>X64</TargetEnvironment>
     </Midl>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;$(CUDA_PATH)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(DXSDK_DIR)/include;.;./inc;./cudaDecodeD3D9;../core;../core/include;../../include;;$(CUDA_PATH)/include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <AdditionalDependencies>cuda.lib;nvcuvid.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;nvapi64.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -231,8 +235,11 @@
     <ClCompile Include="cudaDecodeD3D9\VideoSource.cpp" />
     <ClCompile Include="src\CNVEncoder.cpp" />
     <ClCompile Include="src\CNVEncoderH264.cpp" />
+    <ClCompile Include="src\CNVEncoderH265.cpp" />
+    <ClCompile Include="src\cpuid_ssse3.cpp" />
     <ClCompile Include="src\guidutil2.cpp" />
     <ClCompile Include="src\main2.cpp" />
+    <ClCompile Include="src\crepackyuv.cpp" />
     <ClCompile Include="src\utilities.cpp" />
     <ClCompile Include="src\xcodeutil.cpp" />
   </ItemGroup>
@@ -266,6 +273,7 @@
     <ClInclude Include="cudaDecodeD3D9\VideoSource.h" />
     <ClInclude Include="inc\CNVEncoder.h" />
     <ClInclude Include="inc\CNVEncoderH264.h" />
+    <ClInclude Include="inc\CNVEncoderH265.h" />
     <ClInclude Include="inc\guidutil.h" />
     <ClInclude Include="inc\xcodeutil.h" />
     <ClInclude Include="inc\xcodevid.h" />

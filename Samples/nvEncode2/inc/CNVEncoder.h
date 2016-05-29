@@ -91,6 +91,9 @@ static const GUID  NV_ENC_H264_PROFILE_INVALID_GUID =
 static const GUID NV_ENC_PRESET_GUID_NULL = 
 { 0x0000000, 0x0000, 0x0000, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
 
+static const GUID NV_ENC_PRESET_UNKNOWN1_GUID =
+{ 0x7ADD423D, 0xD035, 0x4F6F, { 0xAE, 0xA5, 0x50, 0x88, 0x56, 0x58, 0x64, 0x3C } };
+
 #if defined (NV_WINDOWS)
 #define NVENCAPI __stdcall
 #elif defined (NV_UNIX)
@@ -105,6 +108,19 @@ typedef void * HANDLE;
 #define S_OK                     (0)
 #define E_FAIL                   (-1)
 #endif
+
+// 
+typedef struct {
+	bool color_known;// flag: colorimetry is known
+
+	// the next parameter is only valid if color_known==true
+	bool color; // 0 == Bt601, 1==BT709 (only valid if color_known==true)
+
+	bool range_known;// flag: quantization scale is known
+
+	// the next parameter is only valid if color_known==true
+	bool range_full; // 0 = limited scale (16-235), 1 = full scale (0..255)
+} CNvEncoder_color_s;
 
 // =========================================================================================
 // Encode Codec GUIDS supported by the NvEncodeAPI interface.
@@ -159,6 +175,8 @@ typedef struct {
 	int value_NV_ENC_CAPS_MB_PER_SEC_MAX;
 	int value_NV_ENC_CAPS_SUPPORT_YUV444_ENCODE;
 	int value_NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE;
+	int value_NV_ENC_CAPS_SUPPORT_SAO;
+	int value_NV_ENC_CAPS_SUPPORT_MEONLY_MODE;
 } nv_enc_caps_s;
 
 typedef struct {
@@ -301,6 +319,7 @@ typedef enum { // updated for NVENC SDK 5.0 (Dec 2014)
     NV_ENC_H264_PROFILE_BASELINE= 66 ,
     NV_ENC_H264_PROFILE_MAIN    = 77 ,
     NV_ENC_H264_PROFILE_HIGH    = 100,
+	NV_ENC_H264_PROFILE_PROGRESSIVE_HIGH = 101,
     NV_ENC_H264_PROFILE_STEREO  = 128,
 	NV_ENC_H264_PROFILE_HIGH_444 = 244,
 	NV_ENC_H264_PROFILE_CONSTRAINED_HIGH = 257,
@@ -313,6 +332,7 @@ const guid_desc codecprofile_names[] =  // updated for NVENC SDK 5.0 (Dec 2014)
     { NV_ENC_H264_PROFILE_BASELINE_GUID,        "H.264 Baseline", NV_ENC_H264_PROFILE_BASELINE },
     { NV_ENC_H264_PROFILE_MAIN_GUID,            "H.264 Main Profile", NV_ENC_H264_PROFILE_MAIN },
     { NV_ENC_H264_PROFILE_HIGH_GUID,            "H.264 High Profile", NV_ENC_H264_PROFILE_HIGH },
+	{ NV_ENC_H264_PROFILE_PROGRESSIVE_HIGH_GUID,"H.264 Progressive High Profile", NV_ENC_H264_PROFILE_PROGRESSIVE_HIGH },// NVENC 6.0 API
     { NV_ENC_H264_PROFILE_STEREO_GUID,          "H.264 Stereo Profile", NV_ENC_H264_PROFILE_STEREO },
     { NV_ENC_H264_PROFILE_HIGH_444_GUID,        "H.264 444 Profile", NV_ENC_H264_PROFILE_HIGH_444 }, // NVENC 4.0 API
     { NV_ENC_H264_PROFILE_CONSTRAINED_HIGH_GUID,"H.264 Constrained High Profile", NV_ENC_H264_PROFILE_CONSTRAINED_HIGH },
@@ -321,16 +341,16 @@ const guid_desc codecprofile_names[] =  // updated for NVENC SDK 5.0 (Dec 2014)
 
 const guid_desc preset_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
 {
-    { NV_ENC_PRESET_DEFAULT_GUID,                               "Default Preset",  0},
-    { NV_ENC_PRESET_LOW_LATENCY_DEFAULT_GUID,                   "Low Latancy Default Preset", 1 },
-    { NV_ENC_PRESET_HP_GUID,                                    "High Performance (HP) Preset", 2},
-    { NV_ENC_PRESET_HQ_GUID,                                    "High Quality (HQ) Preset", 3 },
-    { NV_ENC_PRESET_BD_GUID,                                    "Blue Ray Preset", 4 },
-    { NV_ENC_PRESET_LOW_LATENCY_HQ_GUID,                        "Low Latancy High Quality (HQ) Preset", 5 },
-    { NV_ENC_PRESET_LOW_LATENCY_HP_GUID,                        "Low Latancy High Performance (HP) Preset", 6 },
-    { NV_ENC_PRESET_GUID_NULL,                                  "Reserved Preset", 7},
-    { NV_ENC_PRESET_LOSSLESS_DEFAULT_GUID,                      "Lossless Default Preset", 8 },
-    { NV_ENC_PRESET_LOSSLESS_HP_GUID,                           "Lossless (HP) Preset", 9 }
+    { NV_ENC_PRESET_DEFAULT_GUID,               "Default Preset",  0},
+    { NV_ENC_PRESET_LOW_LATENCY_DEFAULT_GUID,   "Low Latancy Default Preset", 1 },
+    { NV_ENC_PRESET_HP_GUID,                    "High Performance (HP) Preset", 2},
+    { NV_ENC_PRESET_HQ_GUID,                    "High Quality (HQ) Preset", 3 },
+    { NV_ENC_PRESET_BD_GUID,                    "Blue Ray Preset", 4 },
+    { NV_ENC_PRESET_LOW_LATENCY_HQ_GUID,        "Low Latancy High Quality (HQ) Preset", 5 },
+    { NV_ENC_PRESET_LOW_LATENCY_HP_GUID,        "Low Latancy High Performance (HP) Preset", 6 },
+    { NV_ENC_PRESET_GUID_NULL,                  "Reserved Preset", 7},
+    { NV_ENC_PRESET_LOSSLESS_DEFAULT_GUID,      "Lossless Default Preset", 8 },
+    { NV_ENC_PRESET_LOSSLESS_HP_GUID,           "Lossless (HP) Preset", 9 }
 };
 
 
@@ -351,6 +371,7 @@ const st_guid_entry table_nv_enc_profile_names[] = {
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_BASELINE ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_MAIN ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_HIGH ),
+	GUID_ENTRY_I( NV_ENC_H264_PROFILE_PROGRESSIVE_HIGH ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_STEREO ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_HIGH_444 ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_CONSTRAINED_HIGH ),
@@ -383,23 +404,14 @@ const st_guid_entry table_nv_enc_preset_names[] = {
 };
 
 const st_guid_entry table_nv_enc_buffer_format_names[] = {
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_UNDEFINED          ) ,    /**< Undefined buffer format. */
-
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_NV12_PL            ) ,    /**< Semi-Planar YUV [UV interleaved] allocated as serial 2D buffer. */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_NV12_TILED16x16    ) ,    /**< Semi-Planar YUV [UV interleaved] allocated as 16x16 tiles.      */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_NV12_TILED64x16    ) ,    /**< Semi-Planar YUV [UV interleaved] allocated as 64x16 tiles.      */
-
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YV12_PL            ) ,   /**< Planar YUV [YUV separate planes] allocated as serial 2D buffer. */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YV12_TILED16x16    ) ,   /**< Planar YUV [YUV separate planes] allocated as 16x16 tiles.      */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YV12_TILED64x16    ) ,   /**< Planar YUV [YUV separate planes] allocated as 64x16 tiles.      */
-
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_IYUV_PL            ) ,  /**< Packed YUV [YUV separate bytes per pixel] allocated as serial 2D buffer. */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_IYUV_TILED16x16    ) ,  /**< Packed YUV [YUV separate bytes per pixel] allocated as 16x16 tiles.      */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_IYUV_TILED64x16    ) ,  /**< Packed YUV [YUV separate bytes per pixel] allocated as 64x16 tiles.      */
-
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YUV444_PL          ) , /**< Planar YUV [YUV separate bytes per pixel] allocated as serial 2D buffer. */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YUV444_TILED16x16  ) , /**< Planar YUV [YUV separate bytes per pixel] allocated as 16x16 tiles.      */
-    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16  ) , /**< Planar YUV [YUV separate bytes per pixel] allocated as 64x16 tiles.      */
+    GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_UNDEFINED ), /**< Undefined buffer format. */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_NV12      ), /**< Semi-Planar YUV [Y plane followed by interleaved UV plane] */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YV12      ), /**< Planar YUV [Y plane followed by V and U planes] */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_IYUV      ), /**< Planar YUV [Y plane followed by U and V planes] */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_YUV444    ), /**< Planar YUV [Y plane followed by U and V planes] */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_ARGB      ), /**< 8 bit Packed A8R8G8B8 */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_ARGB10    ), /**< 10 bit Packed A2R10G10B10 */
+	GUID_ENTRY( NO_GUID, NV_ENC_BUFFER_FORMAT_AYUV      )  /**< 8 bit Packed A8Y8U8V8 */
 };
 
 const st_guid_entry table_cudaVideoChromaFormat_names[] = {
@@ -427,7 +439,8 @@ const st_guid_entry table_nv_enc_level_h264_names[] = {
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_41            ) ,
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_42            ) ,
     GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_5             ) ,
-    GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_51            )
+    GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_51            ) ,
+	GUID_ENTRY( NO_GUID, NV_ENC_LEVEL_H264_52            )
 };
 
 const st_guid_entry table_nv_enc_level_hevc_names[] = {
@@ -668,6 +681,10 @@ struct EncodeConfig
 	unsigned int              tier;      // (HEVC only) encode tier setting (0 = main)
 	NV_ENC_HEVC_CUSIZE        minCUsize; // (HEVC only) minimum coding unit size
 	NV_ENC_HEVC_CUSIZE        maxCUsize; // (HEVC only) maximum coding unit size
+	
+	// CPU control flags
+	bool					  CPU_enableAVX; // allow repacker to use AVX-instructions
+	bool					  CPU_enableAVX2;// allow repacker to use AVX2-instructions
 
 	void print(string &stringout) const;
 };
@@ -723,10 +740,11 @@ struct EncodeFrameConfig
     unsigned int newHeight;
     unsigned int dynBitrateChangeFlag;
 	uint32_t     ppro_pixelformat; // for EncodeFramePPro() [used by Adobe apps only]
-	bool         ppro_pixelformat_is_yuv420;
-	bool         ppro_pixelformat_is_uyvy422;
-	bool         ppro_pixelformat_is_yuyv422;
-	bool         ppro_pixelformat_is_yuv444;
+	bool         ppro_pixelformat_is_yuv420; // yuv 4:2:0 8bit (~12bpp)
+	bool         ppro_pixelformat_is_uyvy422;// yuv 4:2:2 8bit (16bpp)
+	bool         ppro_pixelformat_is_yuyv422;// yuv 4:2:2 8bit (16bpp)
+	bool         ppro_pixelformat_is_yuv444; // yuv 4:4:4 8bit (32bpp)
+	bool         ppro_pixelformat_is_rgb444f;// rgba 32float  (128bpp)
 };
 
 struct FrameThreadData
@@ -832,6 +850,7 @@ public:
     virtual HRESULT                                      InitializeEncoder() = 0;
     //virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui ) = 0;
 	virtual HRESULT                                      InitializeEncoderCodec(void * const p) = 0;
+	void                                                 set_color_metadata(const CNvEncoder_color_s c); // should be called at same time as InitializeEncoderCodec
 	//virtual HRESULT                                      EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush = false) = 0;
 	virtual HRESULT                                      EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const bool bFlush) = 0;
     virtual HRESULT                                      EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUdeviceptr oFrame[], const unsigned int oFrame_pitch, bool bFlush=false) = 0;
@@ -902,6 +921,13 @@ protected:
 	//  When any part of the encoder needs to write to a file, it will execute the user-supplied callback
 	//size_t (*fwrite_callback)(_In_count_x_(_Size*_Count) const void * _Str, size_t _Size, size_t _Count, FILE * _File);
 	fwrite_callback_t m_fwrite_callback;
+
+	// color metadata (PremierePro plugin only)
+	//  this stores color-info about Adobe's exported video-sequeunce, 
+	//  If there is an unexpected format-change (eg. from YUV -> RGB), then the
+	//  this struct tells crepackyuv which Color-space conversion constants to use:
+	//   Full_scale vs limited_scale,  Bt709 vs Bt601,  etc.
+	CNvEncoder_color_s                                   m_color_metadata;// color metadata
 
 public:
     NV_ENCODE_API_FUNCTION_LIST*                         m_pEncodeAPI;
