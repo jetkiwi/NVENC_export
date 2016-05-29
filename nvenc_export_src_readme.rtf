@@ -1,25 +1,24 @@
-{\rtf1\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil\fcharset0 Courier New;}{\f2\fnil\fcharset0 Consolas;}{\f3\fnil Consolas;}{\f4\fnil\fcharset2 Symbol;}}
+{\rtf1\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil\fcharset0 Consolas;}{\f2\fnil Consolas;}{\f3\fnil\fcharset0 Courier New;}{\f4\fnil\fcharset2 Symbol;}}
+{\colortbl ;\red0\green0\blue0;\red255\green255\blue255;\red0\green128\blue0;}
 {\*\generator Msftedit 5.41.21.2510;}\viewkind4\uc1\pard\sa200\sl276\slmult1\qc\lang9\f0\fs32 Experimental NVENC H264 encoder plugin\fs22  \par
 for Adobe Premiere Pro CS6 (Windows version)\par
-\pard\sa200\sl276\slmult1\tab\tab\tab\tab\tab\tab Mar 14, 2014\par
+\pard\sa200\sl276\slmult1\tab\tab\tab\tab\tab\tab Sep 13, 2014\par
 \par
 \pard\sa200\sl276\slmult1\qc\b\i *NVENC-plugin is third-party software that is not supported or distributed by Adobe or NVidia.  It comes with no warranty, use at your own risk!\par
 \pard\sa200\sl276\slmult1\b0\i0\par
-\ul\b !!! NVENC client license key requirement:\ulnone\b0\par
-\pard\li720\sa200\sl276\slmult1 Access to the NVENC hardware is restricted by a license-key.  The application must provide its client license-key GUID to the Geforce driver API.  Without this license-key, the Geforce will not allow access to any NVENC services.\par
-Since the license-key is commercially distributed by NVidia, the source package does not contain this key.  \b\i In order to recompile any of the NVENC-using projects, you must acquire this license key from NVidia.\b0\i0\par
+\ul\b NVENC client license key requirement:\ulnone\b0\par
+\pard\li720\sa200\sl276\slmult1 Since Feb 2014, NVidia has lifted the client-key check restricting access to NVENC.  User applications no longer need to supply a license-key to open an encoding session.\par
 \pard\sa200\sl276\slmult1\ul\b Package contents:\ulnone\b0\par
 \pard\li720\sa200\sl276\slmult1 This package only contains the C++ source-code for the NVENC-plugin.\par
 Besides the source-code, you will also need the following:\par
 \pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li1440\sa200\sl276\slmult1 Adobe Premiere CS6 SDK \par
 {\pntext\f4\'B7\tab}*Microsoft Visual C++ 2012 Update 4 Professional edition (or higher)\par
-{\pntext\f4\'B7\tab}NVidia Cuda SDK 5.5\par
+{\pntext\f4\'B7\tab}NVidia Cuda SDK 6.5\par
 {\pntext\f4\'B7\tab}Microsoft DirectX 11 SDK (June 2010)\par
-{\pntext\f4\'B7\tab}NVidia NVENC SDK Public Release 3.0\par
-{\pntext\f4\'B7\tab}private NVENC client license key (obtained from NVidia) [only necessary for compatibility with Geforce drivers older than WHQL 334.89]\par
+{\pntext\f4\'B7\tab}NVidia NVENC SDK Public Release 4.0 (Aug 2014)\par
 {\pntext\f4\'B7\tab}Nvidia NVAPI\par
-\pard\li720\sa200\sl276\slmult1 With the exception of the NVENC-license key, all items can be obtained free of charge. (To get Visual Studio Pro free of charge, search Microsoft's website for 'Business spark' or 'Dreamspark')\par
-(For convenience, the source-package also all necessary include-files from the Adobe CS6 SDK and NVENC 3.0 SDK, so you only need the SDK-packages for the API-documentation.)\par
+\pard\li720\sa200\sl276\slmult1 With the exception of Visual Studio Pro, all items can be obtained free of charge.  (If you are a student or startup business, you may be able to download the software free through Microsoft's 'Dreamspark'  or 'Business spark' program.)\par
+(For convenience, the source-package contains all necessary include-files from the Adobe CS6 SDK and NVENC 4.0 SDK, so you only need the SDK-packages for the API-documentation.)\par
 \par
 The source-package contains several different modules:\par
 \pard\sa200\sl276\slmult1\par
@@ -28,9 +27,10 @@ The source-package contains several different modules:\par
 The original program converted the decoded-video (NV12 surface in GPU memory) to RGB32 format, then displayed it in a desktop window. That output method has been disabled, and instead the NV12-surface is copied to an NVENC-input buffer (also NV12 in GPU memory).\par
 [This project is NOT used by nvenc_export]\par
 \pard\sa200\sl276\slmult1 (2) \ul\b nvencode2 \ulnone\b0 - a rudimentary transcoder (Windows command-line operated) \par
-\pard\li720\sa200\sl276\slmult1 This project is based on the NVENC SDK sample-project "\ul nvEncodeApp\ulnone ", which is a command-line H264-encoding tool.  This project also uses files from project \ul cudaDecodeD3D9\ulnone\par
-The encoder decodes the user-specified source bitstream (MPEG-2/VC-1/H264), and re-encodes it to an H264 elementary-bitstream using the NVENC hardware.  The decode-section gets NV12 frames from the modified \ul cudaDecodeD3D9\ulnone  object, then performs a cudamem2cudamem memcopy to transfer the decoded frames to the NVENC input framebuffer.  Some encoding parameters (frame-rate, resolution) are automatically set by the source-video's properties.  Other parameters are  controlled by command-line arguments.\par
-cudaDec\par
+\pard\li720\sa200\sl276\slmult1 nvEncode2 reads the user-specified source bitstream (MPEG-2/VC-1/H264), and re-encodes it to an H264 elementary-bitstream using the NVENC API.  This project uses source code from both the NVENC SDK sample-project "\ul nvEncodeApp\ulnone " (a command-line H264-encoding tool) and \ul cudaDecodeD3D9\ulnone .\par
+In essence, the NCUVID decoder and NVENC encoder are conneted in a "loopback" configuration:  decoder output is fed straight into the nvEncode input pipeline.  Since NCUVID's generates video-frames in the NV12-planar surfaceformat, no format conversion is necessary.  The decoded-frame is copied to an NVENC-allocated input buffer (using a cudamem2cudamem memcpy.  \par
+nvEncode2 sets some H264 encoding parameters (frame-rate, resolution) automatically, from querying the input-video's properties.  Other parameters must be set manually by command-line arguments.\par
+This program was written prior to nvenc-plugin; to prove NVENC hardware was fast enough to warrant development of nvenc-plugin.   (Now that the NVENC SDK is up to v4.0, nvEncode2's source-code is out of date, and as an end-user tool, it's not really usable.)\par
 \ul Supported input formats: \ulnone\par
 \pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li1440\sa200\sl276\slmult1 MPEG-4 system stream (containing a H264 video elementary stream)\par
 {\pntext\f4\'B7\tab}MPEG-2 transport stream (containing an MPEG-2, VC-1, or H264 stream)\par
@@ -42,33 +42,68 @@ cudaDec\par
 \par
 \pard\sa200\sl276\slmult1 (3) \b nvenc_export \b0 - the exporter plugin for Adobe Premiere CS6\par
 \pard\li720\sa200\sl276\slmult1 Derived from the CS6 SDK sample project \b 'SDK_Exporter\b0 ', \par
-The Adobe specific-code queries the NVidia CUDA API to get a list of installed GPUs, then constructs the plugin's control options from the reported capabilities.  The GPU-device query is important, because the device's reported capabilities determine what parameters are available for adjustment. For example, if the GPU doesn't report Compute 3.0, then NVENC is not supported (and the plugin's user panel dialog will reflect that.) \par
+The Adobe specific-code queries the NVidia CUDA API to get a list of installed GPUs.  The GPU-device query is important, because the device's reported capabilities determine what parameters are available for adjustment.  From these reported capabilities,  the plugin constructs menu options and encoding features.  For example, if the GPU doesn't report Compute 3.0, then NVENC is not supported (and the plugin's user panel dialog will reflect that.) \par
 User-interface management (parameter presentation, adjustment, and final validation) compromises most of the code (SDK_Exporter_Params.cpp/.h)\par
-For the actual export-operation, the exporter can write up to 3 separate files (depending on the user's choices in the GUI):\par
-\pard\li1440\sa200\sl276\slmult1 (a) *.m4v - (if video enabled) the encoded video (elementary H264 bitstream)\par
-(b) *.wav - (if audio enabled) uncompressed PCM audio (RIFF WAV format)\par
-(c) *.ts - (if multiplexing == TS) mpeg-2 transport stream  with both audio + video\par
-\pard\li720\sa200\sl276\slmult1\par
-When the user presses the export-button (or tries to save the current setings as a preset), Adobe calls the plugin to validate the parameters.  At this time, the plugin will check that (a) GPU has NVENC capability, and (b) the tsmuxer-path is valid (if user set \ul Multiplexing\ulnone  == 'TS')\par
-If validation succeeds, then the export-operation begins.  First, the plugin will render video (if present & enabled), followed by audio (if present & enabled.)  The final step is the [optional] execution of TSMUXER.exe (if muxing is enabled.)\par
+For the actual export-operation, the exporter will generate up to 4 separate files (depending on the user's choices in the GUI):\par
+\pard\li1440\sa200\sl276\slmult1 (a) *.m4v/*.264 - (if video is enabled) the encoded video (elementary H264 bitstream)\par
+\tab\tab (The extension is dictated by the chosen multiplexer, if enabled.)\par
+(b) *.wav - (if audio is enabled) uncompressed PCM audio (RIFF WAV format)\par
+(c) *.m4a - (if audo is enabled and AAC output is selected) AAC audio bitstream\par
+(d) *.ts/*.mp4 - (if multiplexing is enabled) mpeg-2 transport stream or MPEG-4 system stream \par
+\tab\tab (The extension is dictated by the chosen multiplexer, if enabled.)\par
 \par
+Only the raw video-bitstream and the audio *.wav files are directly written by nvenc_export. The other files are the result of nvenc_export executing third-party tools: neroAacEnc, mp4box, TSmuxer\par
+\pard\li720\sa200\sl276\slmult1\par
+When the user presses the export-button (or tries to save the current setings as a preset), Adobe calls the plugin to validate the parameters.  At this time, the plugin will validate (a) GPU's NVENC capability, and (b) dirpaths to any required third-party tools (tsmuxer, mp4box, neroAacEnc.)\par
+If validation succeeds, then the export-operation begins.  Audio-encode, video-encode, and muxing are processed as separate steps: first, the plugin handles video (if present & enabled), then handles audio (if present & enabled.)  The final step is the [optional] execution of the selected multiplexer (TSMUXER.exe or MP4BOX.exe) \par
 \ul Video-processing loop\ulnone\par
-\pard\li720\sl240\slmult1\f1\fs18  |<- Adobe       | |<--------------------- NVENC plugin ---------------------------->|\par
-   application ->| |                                                       fwrite()  |\par
-  videorender \ul source\ulnone     format convert : :                                callback   :\par
-                       +--------------+: : +----------------------+    +-------------+\par
- Adobe videoframe ---->| YV12 -> NV12 |--->|H264 encoding pipeline|--->| to disk file|\par
-   Planar_YUV420       +--------------+    +----------------------+    +-------------+\par
+\pard\li720\sl240\slmult1\cf1\highlight2\lang1033\f1\fs19 Entrypoint: RenderAndWriteAllVideo()\par
+The very first frame of video ("frame#0") is handled as a special-case.  The plugin needs to determine a compatible PrPixelFormat to use for the entire video, so \cf3\f2 RenderAndWriteVideoFrame\cf1\f1 () calls \cf3\f2 sequenceRenderSuite->RenderVideoFrame()\f1  \cf1 with a list of compatible YUV pixel-formats.\par
+\par
+For 4:2:0 encoding, this list contains the planar 4:2:0 formats "PrPixelFormat_YUV_420_*_Planar_8u_*."\par
+\par
+(1) If RenderVideoFrame() succeeds, it will return with the (4:2:0) PrPixelFormat chosen for the rendered video.\par
+\par
+(2) If RenderVideoFrame() fails, then nvenc_exporter switches to an alternate (less desirable) list of PrPixelFormats: UYVY422/YUYV422 (16bpp packed-pixel 4:2:2 YUV.)  These formats requrire more work for the host-CPU to convert into NVENC's native format (NV12 4:2:0 planar.)   nvenc_exporter calls RenderVideoFrame() a second time, using this alternate list.\par
+\par
+(3) If RenderVideoFrame() fails to render video with the second (alternate) list of PrPixelFormats (4:2:2), then this is a FATAL ERROR, and nvenc_exporter aborts the export operation.  [Note: tried to call RenderVideoFrame() once, with a combined-list of YUV422 + YUV420 formats, but the Adobe method would still return failure.  The fallback YUV422 formats only work if none of the other list-items are YUV420 planar.]\par
+\par
+For 4:4:4 encoding, there is only 1 list of attempted formats PrPixelFormat_VUYA_444_8u_*.  (As with 4:2:0 encoding, if RenderVideoFrame fails, then nvenc_exporter aborts the export operation.)\par
+\par
+The chosen PrPixelFormat (PrPixelFormat0) is used to set the pixelformat for the entire video.\par
+\par
+After the special-case handling of frame#0 has finished, then nvenc_export calls adobe-API function DoMultiPassExportLoop(), to render the entire video (including frame#0 again, since it wasn't encoded above.)  Each rendered video-frame (from Adobe) is sent to the callback function we registered with the Adobe-API: \lang9\f2 NVENC_export_FrameCompletionFunction\lang1033\f1 ().\par
+\lang9\f2\par
+\cf0\highlight0\f3\fs18\par
+ |<- Adobe       | |<--------------------- NVENC plugin ---------------------------->|\par
+ | application ->| |                                                       fwrite()  |\par
+  videorender \ul source\ulnone     format convert : :                         :      callback   :\par
+                       +---------------+ : +----------------------+    +-------------+\par
+ Adobe videoframe ---->|convert to NV12|-->|H264 encoding pipeline|--->| to disk file|\par
+  (Planar_YUV420 or    +---------------+   +----------------------+    +-------------+\par
+  (Packed_UYVY422/YUYV422)             : :                         ::                :\par
  :      |                              : :                         ::                :\par
- :   DoMultiPassExportLoop()           : :                         ::                :\par
+ :\cf1\highlight2\f2\fs19 NVENC_export_FrameCompletionFunction\lang1033\f1 ()\cf0\highlight0\lang9\f3\fs18  :                         ::                :\par
  :      callback                       : :                         ::                :\par
  |<---------  host CPU  -------------->| |<----NVENC hardware----->||<- host CPU --->|\par
 \pard\sl240\slmult1\par
-\pard\sa200\sl276\slmult1 * In \ul\i Premiere Elements 11\ulnone  \i0 only, \lang1033\f2\fs19 'push-mode' processing is not supported, so \lang9\f1\fs18 NVENC-plugin calls \f3\fs19 RenderVideoFrameAndConformToPixelFormat\lang1033\f2 () instead of DoMultiPassExportLoop()\par
-\lang9\f0\fs22\par
-\pard\li720\sl240\slmult1\ul Audio-processing loop\par
+\pard\sa200\sl276\slmult1 * In \ul\i Premiere Elements 11\ulnone  \i0 only, \lang1033\f1\fs19 'push-mode' processing is not supported, so \lang9\f3\fs18 NVENC-plugin calls \f2\fs19 RenderVideoFrameAndConformToPixelFormat\lang1033\f1 () instead of DoMultiPassExportLoop()\par
+\pard\li720\sa200\sl276\slmult1 Next, NVENC_export_FrameCompletionFunction() passes the rendered videoframe to NVENC by calling CNvEncoderH264::EncodeFramePPro().  Here, the rendered-video (YUV420, YUYV422, or YUV444) is converted into a NVENC-compatible planar-format:\par
+(a) [4:2:0 encoding] YUV420-planar or YUV422-packed_pixel source must be converted into NV12 planar\par
+\tab\cf1\highlight2\f2 _convert_YUV420toNV12_sse2\f1 ()  - reformat Adobe YUV420 frame into NVENC-compatible NV12 frame\par
+              Input and output are 1:1 identical. (Difference is in byte-ordering and 2-plane.)\par
+\tab\f2 _convert_YUV42\f1 2\f2 toNV12_ss\f1 se3() - reformat Adobe  YUV422 frame into NVENC-compatible NV12 frame\par
+              The source UV-samples are subsampled vertically by nearest-neighbor averaging:\par
+                  destUV[x,y'] = (srcUV[x,y] + srcUV[x,y+1]) >> 1; // arithmetic average\par
+\cf0\highlight0 (b) [4:4:4 encoding] YUV444-packed_pixel source must be converted into YUV444 planar.\par
+\cf1\highlight2\tab\f2 _convert_YUV4\f1 44\f2 to\f1 Y444\f2 _ss\f1 se3() - reformat Adobe YUV444 frame into NVENC-compatible Y444 frame\par
+              Input and output are 1:1 identical. (Difference is in byte-ordering and 3-plane.)\par
+Finally, CNvEncoderH264::EncodeFramePPro() submits the postprocessed frame to NVENC API (using asynchronous mode): \f2 m_pEncodeAPI->nvEncEncodePicture\f1\par
+* nvenc_export avoids doing any CSC (color-space-conversion RGB -> YUV); because the Adobe CS6 API can perform the required CSC (and probably faster than nvenc_export.)\par
+\cf0\highlight0\par
+\pard\li720\sl240\slmult1\lang9\ul\f0\fs22 Audio-processing loop\par
 \ulnone If enabled, audio is handled after all video has been encoded. Audio processing is done entirely on host-CPU:\par
-\pard\sl240\slmult1\f1\fs18\par
+\pard\sl240\slmult1\f3\fs18\par
 \pard\li720\sl240\slmult1 |<-------- Adobe application ---------->| |<-------- NVENC plugin ----------------->|\par
     Adobe            format convert       :                                         :\par
  audio renderer       32bit -> 16bit      :    channel re-order          fwrite()   :\par
@@ -81,7 +116,7 @@ If validation succeeds, then the export-operation begins.  First, the plugin wil
 \pard\li1440\sl240\slmult1 If AAC-audio is selected, then NVENC performs the additional encoding step of launching neroAacEnc.exe:\par
 \pard\li720\sl240\slmult1\par
                                                 ShellExecute()\par
-\f1\fs18      +------------------+  |  +--------------------------------+   +--------------+\par
+\f3\fs18      +------------------+  |  +--------------------------------+   +--------------+\par
      | NVENC generated  |---->| NeroAacEnc.exe -if -of -br <X> |-->| *.M4A output |\par
      | *.WAV audio file |     +--------------------------------+   |  file        |\par
      +------------------+          <third party tool>              +--------------+\par
@@ -95,7 +130,7 @@ If validation succeeds, then the export-operation begins.  First, the plugin wil
 \pard\li720\sl240\slmult1\ul MP4 file output\ulnone\par
    *MP4 output only supports AAC-audio (or no audio)\par
                                                                                       ShellExecute()\par
-\f1\fs18 +------------------+           +--------------------------------+   +--------------+\par
+\f3\fs18 +------------------+           +--------------------------------+   +--------------+\par
 | NVENC generated  |---------->| MP4Box.exe -add <a> -add <v> ..|-->| *.MP4 output |\par
 | *.264 video file |           +                                +   |  file        |\par
 +------------------+      +--->+--------------------------------+   +--------------+\par
@@ -108,9 +143,9 @@ If validation succeeds, then the export-operation begins.  First, the plugin wil
 \par
 \ul\f0\fs22 TS file output\par
 \ulnone    *TS output supports WAV-audio and AAC-audio\par
-\f1\fs18\par
+\f3\fs18\par
 \f0\fs22                                                                                       ShellExecute()\par
-\f1\fs18 +------------------+           +--------------------------------+   +--------------+\par
+\f3\fs18 +------------------+           +--------------------------------+   +--------------+\par
 | NVENC generated  |---------->| TSMuxer.exe -add <a> -add <v> ..|-->| *.MP4 output |\par
 | *.M4V video file |           +                                +   |  file        |\par
 +------------------+      +--->+--------------------------------+   +--------------+\par
@@ -123,16 +158,20 @@ If validation succeeds, then the export-operation begins.  First, the plugin wil
 |NVENC generated  |------>+\par
 | *.WAV audio file|\par
 +-----------------+\par
+|<---------------------------------  host CPU  ----------------------------------->| \par
 \pard\sa200\sl276\slmult1\f0\fs22\par
 \ul Code deficiencies:\ulnone\par
 \tab The Adobe plugin directly calls routines located in the nVencode2 project, which is a \i Windows command-line\i0  application.  Thus, the error-trapping routines in CNvEncoder/CNvEncoderH264 call the "exit()" function from the C-standard library (CSTL). When exit() is called inside a GUI-application such as Adobe Premiere, the application crashes! This needs to be cleaned up.\par
 \tab The CSTL function "assert()" is used all over the place.\par
-\tab The "_sse2" version of\f1  yuv420tonv12() \f0 in CNvEncoderH264.cpp should probably be rewritten.\par
+\tab The "_sse2" version of\f3  yuv420tonv12() \f0 in CNvEncoderH264.cpp should probably be rewritten.\par
 \tab\par
 \ul Source code license\ulnone\par
 \pard\li720\sa200\sl276\slmult1 This package contains source-code owned by \i NVidia Corporation \i0 and \i Adobe Corporation\i0 .  Their licensing terms apply to any code owned by them.\par
 NVENC-plugin original code (i.e. code not derived from NVidia/Adobe) is distributed under the terms of the \ul\b Lesser GPL\ulnone\b0  (LGPL) license.\par
 \pard\sa200\sl276\slmult1\ul Revision history\ulnone\par
+\pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1 Sep 13, 2014 - In previous releases, using MPE Hardware acceleration with nvenc_export would generally cause the export operation to fail.  This was due to laziness on the part of nvenc_export's video-render requests.  nvenc_export requested video in only 1 format: PrPixelFormat_YUV_420_Planar.  If any GPU effects were active in the video-render, the Adobe API would error out instead of sending video, causing nvencto fail.  Now, if render-request (for 420_Planar video) fails, nvenc_export then makes a second render attempt with 4:2:2 packed-pixel video (PrPixelFormat_YUYV422_8u or UYVY422.)\par
+\pard\li720\sa200\sl276\slmult1 And for Maxwell GPUs only (Geforce 750/750Ti, GTX970, GTX980): add support for lossless and 4:4:4 encoding modes. \par
+Upgraded the header-file \f3 nvEncodeAPI.h \f0 to SDK 4.0 version (Aug 2014)\par
 \pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1 Mar 14, 2014 - add a specific error-condition check for video-encode failures that happen on frame#0 (i.e. the very first rendered frame.)  nvenc_export *assumes* this failure is due to source video-size and output video-size being different.\par
 \pard\li720\sa200\sl276\slmult1 Fix a stupid bug in the GPU-chooser, which caused nvenc_export to always export from GPUindex#0, regardless of the user's selection.  Fixed same bug in nvEncode2.exe.\par
 H264 video-output now contains an information-string embedded in frame#0, readable by the third-party tool "MediaInfo".  The string contains nvenc_export and GPU-driver version, encoder settings, and the GPU nameString (as reported by the NVENC API.)\par

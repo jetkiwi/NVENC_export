@@ -149,6 +149,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
     <Link>
       <AdditionalDependencies>nvapi64.lib;cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -194,6 +195,7 @@
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
     <Link>
       <AdditionalDependencies>nvapi64.lib;cuda.lib;d3d9.lib;winmm.lib;setupapi.lib;atls.lib;dxguid.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>

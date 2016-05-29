@@ -147,6 +147,18 @@ inline bool IsYV12Format(NV_ENC_BUFFER_FORMAT dwFormat)
        return false;
 }
 
+inline bool IsYUV444Format(NV_ENC_BUFFER_FORMAT dwFormat)
+{
+   if ((dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_PL) ||
+       (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_TILED16x16) ||
+       (dwFormat == NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16))
+   {
+       return true;
+   }
+   else
+       return false;
+}
+
 inline bool IsTiled16x16Format(NV_ENC_BUFFER_FORMAT dwFormat)
 {
    if ((dwFormat == NV_ENC_BUFFER_FORMAT_NV12_TILED16x16) ||

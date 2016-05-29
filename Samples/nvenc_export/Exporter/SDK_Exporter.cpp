@@ -193,8 +193,19 @@ nvenc_initialize_h264_session( const PrPixelFormat PixelFormat0, exDoExportRec *
 		case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709_FullRange:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709_FullRange:
+		case PrPixelFormat_YUYV_422_8u_709:
+		case PrPixelFormat_UYVY_422_8u_709:
 		case PrPixelFormat_VUYX_4444_8u_709:
 		case PrPixelFormat_VUYA_4444_8u_709:
+		case PrPixelFormat_VUYP_4444_8u_709:
+		case PrPixelFormat_VUYA_4444_32f_709:
+		case PrPixelFormat_VUYX_4444_32f_709:
+		case PrPixelFormat_VUYP_4444_32f_709:
+		case PrPixelFormat_V210_422_10u_709:
+		case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_709:
+		case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_709_FullRange:
+		case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709:
+		case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709_FullRange:
 			vui.colourMatrix = 1;
 			break;
 
@@ -202,6 +213,13 @@ nvenc_initialize_h264_session( const PrPixelFormat PixelFormat0, exDoExportRec *
 		case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601_FullRange:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601_FullRange:
+		case PrPixelFormat_YUYV_422_8u_601:
+		case PrPixelFormat_UYVY_422_8u_601:
+		case PrPixelFormat_V210_422_10u_601:
+		case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_601:
+		case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_601_FullRange:
+		case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601:
+		case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601_FullRange:
 			vui.colourMatrix = 6;
 			break;
 		default:
@@ -223,6 +241,10 @@ nvenc_initialize_h264_session( const PrPixelFormat PixelFormat0, exDoExportRec *
 		case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601_FullRange:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709_FullRange:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601_FullRange:
+		case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_709_FullRange:
+		case PrPixelFormat_YUV_420_MPEG4_FIELD_PICTURE_PLANAR_8u_601_FullRange:
+		case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_709_FullRange:
+		case PrPixelFormat_YUV_420_MPEG2_FIELD_PICTURE_PLANAR_8u_601_FullRange:
 			vui.videoFullRangeFlag = 1;
 			break;
 		default :
@@ -1061,17 +1083,35 @@ prSuiteError NVENC_export_FrameCompletionFunction(
 
 	csSDK_int32		rowbytes;
 	exParamValues	width, height, temp_param;
-	csSDK_int32		nvenc_pixelformat; // selected NVENC input pixelFormat (user-parameter from plugin)
-	bool			use_yuv444;        // a 4:4:4 format is in use (instead of 4:2:0)
+	PrPixelFormat   rendered_pixelformat; // pixelformat of the current video-frame
 
 	EncodeFrameConfig nvEncodeFrameConfig = {0};
 
 	mySettings->exportParamSuite->GetParamValue(exID, 0, ADBEVideoWidth, &width);
 	mySettings->exportParamSuite->GetParamValue(exID, 0, ADBEVideoHeight, &height);
-	mySettings->exportParamSuite->GetParamValue(exID, 0, ParamID_chromaFormatIDC, &temp_param);
 
 	nvEncodeFrameConfig.height = height.value.intValue;
 	nvEncodeFrameConfig.width  = width.value.intValue;
+
+	mySettings->ppixSuite->GetPixelFormat(inRenderedFrame, &rendered_pixelformat );
+	const bool		adobe_yuv420 =      // Adobe is sending Planar YUV420 (instead of packed-pixel 422/444)
+		            PrPixelFormat_is_YUV420(rendered_pixelformat);
+
+	if ( rendered_pixelformat != mySettings->rendered_PixelFormat0 ) {
+		// TODO: ERROR!
+	}
+
+	// CNvEncoderH264 must know the source-video's pixelformat, in order to
+	//    convert it into an NVENC compatible format (NV12 or YUV444)
+	nvEncodeFrameConfig.ppro_pixelformat           = rendered_pixelformat;
+	nvEncodeFrameConfig.ppro_pixelformat_is_yuv420 = PrPixelFormat_is_YUV420( rendered_pixelformat) ;
+	nvEncodeFrameConfig.ppro_pixelformat_is_yuv444 = PrPixelFormat_is_YUV444( rendered_pixelformat );
+	nvEncodeFrameConfig.ppro_pixelformat_is_uyvy422= 
+		(rendered_pixelformat == PrPixelFormat_UYVY_422_8u_601) ||
+		(rendered_pixelformat == PrPixelFormat_UYVY_422_8u_709);
+	nvEncodeFrameConfig.ppro_pixelformat_is_yuyv422= 
+		(rendered_pixelformat == PrPixelFormat_YUYV_422_8u_601) ||
+		(rendered_pixelformat == PrPixelFormat_YUYV_422_8u_709);
 
 	// NVENC picture-type: Interlaced vs Progressive
 	//
@@ -1092,25 +1132,7 @@ prSuiteError NVENC_export_FrameCompletionFunction(
 		nvEncodeFrameConfig.topField = (seqFieldOrder.mInt32 == prFieldsLowerFirst) ? false : true;
 	}
 
-	nvenc_pixelformat = temp_param.value.intValue;
-	use_yuv444 = (nvenc_pixelformat >= NV_ENC_BUFFER_FORMAT_YUV444_PL);
-
-	if ( use_yuv444 ) {
-		// TODO: not supported properly yet by CNvEncoderH264.cpp?
-		// 4:4:4 packed pixel - only pointer[0] is used, (1 & 2 aren't)
-		mySettings->ppixSuite->GetPixels(	inRenderedFrame,
-											PrPPixBufferAccess_ReadOnly,
-											&frameBufferP);
-		mySettings->ppixSuite->GetRowBytes(inRenderedFrame, &rowbytes);
-		nvEncodeFrameConfig.stride[0] = rowbytes; // Y-plane
-
-		nvEncodeFrameConfig.yuv[0] = reinterpret_cast<unsigned char *>(&frameBufferP[0]); // Y-plane
-		nvEncodeFrameConfig.stride[1] = 0; // U-plane not used
-		nvEncodeFrameConfig.stride[2] = 0; // V-plane not used
-		nvEncodeFrameConfig.yuv[1] = NULL;
-		nvEncodeFrameConfig.yuv[2] = NULL;
-	}
-	else {
+	if ( adobe_yuv420 ) {
 		// 4:2:0 planar (all 3 yuv[] pointers used)
 		size_t       rowsize;
 		csSDK_uint32 stride[3]; // #bytes per row (for each of Y/U/V planes)
@@ -1133,6 +1155,23 @@ prSuiteError NVENC_export_FrameCompletionFunction(
 		mySettings->ppix2Suite->GetSize(inRenderedFrame, &rowsize);
 		rowbytes = rowsize;
 	}
+	else {
+		// Packed pixel framedata
+		//   ... Either 16bpp 4:2:2 or 32bpp 4:4:4
+		//
+		// In packed-pixel format, only pointer[0] is used,(1 & 2 aren't)
+		mySettings->ppixSuite->GetPixels(	inRenderedFrame,
+											PrPPixBufferAccess_ReadOnly,
+											&frameBufferP);
+		mySettings->ppixSuite->GetRowBytes(inRenderedFrame, &rowbytes);
+		nvEncodeFrameConfig.stride[0] = rowbytes; // Y-plane
+
+		nvEncodeFrameConfig.yuv[0] = reinterpret_cast<unsigned char *>(&frameBufferP[0]); // Y-plane
+		nvEncodeFrameConfig.stride[1] = 0; // U-plane not used
+		nvEncodeFrameConfig.stride[2] = 0; // V-plane not used
+		nvEncodeFrameConfig.yuv[1] = NULL;
+		nvEncodeFrameConfig.yuv[2] = NULL;
+	}
 
 	// Submit the Adobe rendered frame to NVENC:
 	//   (1) If NvEncoder is operating in 'async_mode', then the call will return as soon
@@ -1140,7 +1179,10 @@ prSuiteError NVENC_export_FrameCompletionFunction(
 	//   (2) if NvEncoder is operating in 'sync_mode', then call will not return until
 	//       NVENC has completed encoding of this frame.
 	//HRESULT hr = mySettings->p_NvEncoder->EncodeFrame( &nvEncodeFrameConfig, false );
-	HRESULT hr = mySettings->p_NvEncoder->EncodeFramePPro( &nvEncodeFrameConfig, false );
+	HRESULT hr = mySettings->p_NvEncoder->EncodeFramePPro( 
+		&nvEncodeFrameConfig, 
+		false // flush
+	);
 
 	return ( hr == S_OK ) ? malNoError : // no error
 		malUnknownError;
@@ -1519,11 +1561,14 @@ prMALError RenderAndWriteAllVideo(
 			break; // halt the render (abort the for-loop)
 		}
 
+		//
 		// for Frame#0 only: analyze the rendered frame's PrPixelFormat,
-		//                   
+		//                   (because we will have Adobe render the rest of the video
+		//                    to the same format)
 		//
 		if ( is_frame0 ) {
 			PrPixelFormat adobe_selected_prpixelformat = mySettings->rendered_PixelFormat0;
+
 			// Write informational message to Adobe's log:
 			//    which pixelformat did Adobe choose for us?
 			os.clear();

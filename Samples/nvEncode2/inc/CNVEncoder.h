@@ -82,6 +82,13 @@
 #define MAX_OUTPUT_QUEUE 32
 #define SET_VER(configStruct, type) {configStruct.version = type##_VER;}
 
+// {00000000-0000-0000-0000-000000000000}
+static const GUID  NV_ENC_H264_PROFILE_INVALID_GUID =
+{ 0x0000000, 0x0000, 0x0000, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
+
+static const GUID NV_ENC_PRESET_GUID_NULL = 
+{ 0x0000000, 0x0000, 0x0000, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } };
+
 #if defined (NV_WINDOWS)
 #define NVENCAPI __stdcall
 #elif defined (NV_UNIX)
@@ -147,6 +154,9 @@ typedef struct {
     int value_NV_ENC_CAPS_PREPROC_SUPPORT;
     int value_NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT;
 	int value_NV_ENC_CAPS_MB_NUM_MAX;
+	int value_NV_ENC_CAPS_MB_PER_SEC_MAX;
+	int value_NV_ENC_CAPS_SUPPORT_YUV444_ENCODE;
+	int value_NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE;
 } nv_enc_caps_s;
 
 typedef struct {
@@ -180,41 +190,41 @@ const st_guid_entry table_nv_enc_params_frame_mode_names[] = {
 	GUID_ENTRY(NO_GUID, MODE_MBAFF)
 };
 
-const param_desc ratecontrol_names[] = 
+const param_desc ratecontrol_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
 {
-    { NV_ENC_PARAMS_RC_CONSTQP,     "Constant QP Mode"                        },
-    { NV_ENC_PARAMS_RC_VBR,         "VBR (Variable Bitrate)"                  },
-    { NV_ENC_PARAMS_RC_CBR,         "CBR (Constant Bitrate)"                  },
-    { 3,                            "Invalid Rate Control Mode"               },
-    { NV_ENC_PARAMS_RC_VBR_MINQP,   "VNR_MINQP (Variable Bitrate with MinQP)" },
-    { 5,                            "Invalid Rate Control Mode"               },
-    { 6,                            "Invalid Rate Control Mode"               },
-    { 7,                            "Invalid Rate Control Mode"               },
-    { NV_ENC_PARAMS_RC_2_PASS_QUALITY,"Two-Pass (Constant Bitrate Quality)"     },
-	{ 9,                            "Invalid Rate Control Mode"               },
-	{ 0xA,                          "Invalid Rate Control Mode"               },
-	{ 0XB,                          "Invalid Rate Control Mode"               },
-	{ 0xC,                          "Invalid Rate Control Mode"               },
-	{ 0xD,                          "Invalid Rate Control Mode"               },
-	{ 0xE,                          "Invalid Rate Control Mode"               },
-	{ 0xF,                          "Invalid Rate Control Mode"               },
-    { NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP,"Two-Pass (Constant Bitrate FCAP)"  },
-	{ 0x11,                         "Invalid Rate Control Mode"               },
-	{ 0x12,                         "Invalid Rate Control Mode"               },
-	{ 0x13,                         "Invalid Rate Control Mode"               },
-	{ 0x14,                         "Invalid Rate Control Mode"               },
-	{ 0x15,                         "Invalid Rate Control Mode"               },
-	{ 0x16,                         "Invalid Rate Control Mode"               },
-	{ 0x17,                         "Invalid Rate Control Mode"               },
-	{ 0x18,                         "Invalid Rate Control Mode"               },
-	{ 0x19,                         "Invalid Rate Control Mode"               },
-	{ 0x1A,                         "Invalid Rate Control Mode"               },
-	{ 0x1B,                         "Invalid Rate Control Mode"               },
-	{ 0x1C,                         "Invalid Rate Control Mode"               },
-	{ 0x1D,                         "Invalid Rate Control Mode"               },
-	{ 0x1E,                         "Invalid Rate Control Mode"               },
-	{ 0x1F,                         "Invalid Rate Control Mode"               },
-	{ NV_ENC_PARAMS_RC_CBR2,        "Two-pass (Constant Bitrate IDR)"         }
+    { NV_ENC_PARAMS_RC_CONSTQP,                 "Constant QP Mode"                        },
+    { NV_ENC_PARAMS_RC_VBR,                     "VBR (Variable Bitrate)"                  },
+    { NV_ENC_PARAMS_RC_CBR,                     "CBR (Constant Bitrate)"                  },
+    { 3,                                        "Invalid Rate Control Mode"               },
+    { NV_ENC_PARAMS_RC_VBR_MINQP,               "VBR_MINQP (Variable Bitrate with MinQP)" },
+    { 5,                                        "Invalid Rate Control Mode"               },
+    { 6,                                        "Invalid Rate Control Mode"               },
+    { 7,                                        "Invalid Rate Control Mode"               },
+    { NV_ENC_PARAMS_RC_2_PASS_QUALITY,          "Two-Pass Prefered Quality Bitrate"       },
+    { 9,                                        "Invalid Rate Control Mode"               },
+    { 10,                                       "Invalid Rate Control Mode"               },
+    { 11,                                       "Invalid Rate Control Mode"               },
+    { 12,                                       "Invalid Rate Control Mode"               },
+    { 13,                                       "Invalid Rate Control Mode"               },
+    { 14,                                       "Invalid Rate Control Mode"               },
+    { 15,                                       "Invalid Rate Control Mode"               },
+    { NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP,    "Two-Pass Prefered Frame Size Bitrate"    },
+    { 17,                                       "Invalid Rate Control Mode"               },
+    { 18,                                       "Invalid Rate Control Mode"               },
+    { 19,                                       "Invalid Rate Control Mode"               },
+    { 20,                                       "Invalid Rate Control Mode"               },
+    { 21,                                       "Invalid Rate Control Mode"               },
+    { 22,                                       "Invalid Rate Control Mode"               },
+    { 23,                                       "Invalid Rate Control Mode"               },
+    { 24,                                       "Invalid Rate Control Mode"               },
+    { 25,                                       "Invalid Rate Control Mode"               },
+    { 26,                                       "Invalid Rate Control Mode"               },
+    { 27,                                       "Invalid Rate Control Mode"               },
+    { 28,                                       "Invalid Rate Control Mode"               },
+    { 29,                                       "Invalid Rate Control Mode"               },
+    { 30,                                       "Invalid Rate Control Mode"               },
+    { 31,                                       "Invalid Rate Control Mode"               },
+    { NV_ENC_PARAMS_RC_2_PASS_VBR,              "Two-Pass (Variable Bitrate)"             }
 };
 
 const st_guid_entry table_nv_enc_ratecontrol_names[] = {
@@ -224,7 +234,7 @@ const st_guid_entry table_nv_enc_ratecontrol_names[] = {
 	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_VBR_MINQP),
 	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_2_PASS_QUALITY),
 	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP),
-	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_CBR2)
+	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_2_PASS_VBR)
 };
 
 const param_desc encode_picstruct_names[] = 
@@ -293,35 +303,29 @@ const guid_desc codec_names[] =
     { NV_ENC_CODEC_H264_GUID, "H.264 Codec"           , 4}
 };
 
-typedef enum {
-//	NV_ENC_CODEC_PROFILE_AUTOSELECT,
+typedef enum { // updated for NVENC SDK 4.0 (Aug 2014)
+	NV_ENC_H264_PROFILE_AUTOSELECT = 0,
     NV_ENC_H264_PROFILE_BASELINE= 66 ,
     NV_ENC_H264_PROFILE_MAIN    = 77 ,
     NV_ENC_H264_PROFILE_HIGH    = 100,
     NV_ENC_H264_PROFILE_STEREO  = 128,
-	NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY,
-	NV_ENC_H264_PROFILE_CONSTRAINED_HIGH,
-	NV_ENC_MPEG2_PROFILE_SIMPLE,
-	NV_ENC_MPEG2_PROFILE_MAIN,
-	NV_ENC_MPEG2_PROFILE_HIGH,
-	NV_ENC_VP8_PROFILE,
-	NV_ENC_VC1_PROFILE_SIMPLE,
-	NV_ENC_VC1_PROFILE_MAIN,
-	NV_ENC_VC1_PROFILE_ADVANCED,
-	NV_ENC_JPEG_PROFILE_BASELINE
+	NV_ENC_H264_PROFILE_HIGH_444 = 244,
+//	NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY,
+	NV_ENC_H264_PROFILE_CONSTRAINED_HIGH = 257
 } enum_NV_ENC_H264_PROFILE;
 
-const guid_desc codecprofile_names[] = 
+const guid_desc codecprofile_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
 {
+    { NV_ENC_H264_PROFILE_AUTOSELECT_GUID, "H.264 Auto", NV_ENC_H264_PROFILE_AUTOSELECT },
     { NV_ENC_H264_PROFILE_BASELINE_GUID, "H.264 Baseline", NV_ENC_H264_PROFILE_BASELINE },
     { NV_ENC_H264_PROFILE_MAIN_GUID,     "H.264 Main Profile", NV_ENC_H264_PROFILE_MAIN },
     { NV_ENC_H264_PROFILE_HIGH_GUID,     "H.264 High Profile", NV_ENC_H264_PROFILE_HIGH },
-    { NV_ENC_H264_PROFILE_STEREO_GUID,   "H.264 Stereo Profile", NV_ENC_H264_PROFILE_STEREO }
+    { NV_ENC_H264_PROFILE_STEREO_GUID,   "H.264 Stereo Profile", NV_ENC_H264_PROFILE_STEREO },
+    { NV_ENC_H264_PROFILE_HIGH_444_GUID,   "H.264 444 Profile", NV_ENC_H264_PROFILE_HIGH_444 },
+	{ NV_ENC_H264_PROFILE_CONSTRAINED_HIGH_GUID, "H.264 Constrained High Profile", NV_ENC_H264_PROFILE_CONSTRAINED_HIGH }
 };
 
-// Note: starting with WHQL Geforce driver 314.21, some of the PRESETs below are no longer
-//       supported.
-const guid_desc preset_names[] =
+const guid_desc preset_names[] =  // updated for NVENC SDK 4.0 (Aug 2014)
 {
     { NV_ENC_PRESET_DEFAULT_GUID,                               "Default Preset",  0},
     { NV_ENC_PRESET_LOW_LATENCY_DEFAULT_GUID,                   "Low Latancy Default Preset", 1 },
@@ -329,42 +333,32 @@ const guid_desc preset_names[] =
     { NV_ENC_PRESET_HQ_GUID,                                    "High Quality (HQ) Preset", 3 },
     { NV_ENC_PRESET_BD_GUID,                                    "Blue Ray Preset", 4 },
     { NV_ENC_PRESET_LOW_LATENCY_HQ_GUID,                        "Low Latancy High Quality (HQ) Preset", 5 },
-    { NV_ENC_PRESET_LOW_LATENCY_HP_GUID,                        "Low Latancy High Performance (HP) Preset", 6 }
-
+    { NV_ENC_PRESET_LOW_LATENCY_HP_GUID,                        "Low Latancy High Performance (HP) Preset", 6 },
+    { NV_ENC_PRESET_GUID_NULL,                                  "Reserved Preset", 7},
+    { NV_ENC_PRESET_LOSSLESS_DEFAULT_GUID,                      "Lossless Default Preset", 8 },
+    { NV_ENC_PRESET_LOSSLESS_HP_GUID,                           "Lossless (HP) Preset", 9 }
 };
 
 
 typedef enum {
-	NV_ENC_CODEC_H264  = 4,
-	NV_ENC_CODEC_MPEG2 = 3, 
-	NV_ENC_CODEC_VC1   = 2, 
-	NV_ENC_CODEC_JPEG  = 1, 
-	NV_ENC_CODEC_VP8   = 0
+	NV_ENC_CODEC_H264  = 4
 } enum_NV_ENC_CODEC;
 
 const st_guid_entry table_nv_enc_codec_names[] = {
-	GUID_ENTRY_I( NV_ENC_CODEC_H264  ),
-	GUID_ENTRY_I( NV_ENC_CODEC_MPEG2 ), 
-	GUID_ENTRY_I( NV_ENC_CODEC_VC1   ), 
-	GUID_ENTRY_I( NV_ENC_CODEC_JPEG  ), 
-	GUID_ENTRY_I( NV_ENC_CODEC_VP8   )
+	GUID_ENTRY_I( NV_ENC_CODEC_H264  )
 };
 
+// table_nv_enc_profile_names[] must be aligned with codecprofile_names[]
+// (i.e. entries must be listed in the exact same order
 const st_guid_entry table_nv_enc_profile_names[] = {
-	//GUID_ENTRY_I( NV_ENC_CODEC_PROFILE_AUTOSELECT ), 
+	GUID_ENTRY_I( NV_ENC_H264_PROFILE_AUTOSELECT ), 
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_BASELINE ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_MAIN ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_HIGH ),
 	GUID_ENTRY_I( NV_ENC_H264_PROFILE_STEREO ),
-	GUID_ENTRY_I( NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY ),
-	GUID_ENTRY_I( NV_ENC_MPEG2_PROFILE_SIMPLE ),
-	GUID_ENTRY_I( NV_ENC_MPEG2_PROFILE_MAIN ),
-	GUID_ENTRY_I( NV_ENC_MPEG2_PROFILE_HIGH ),
-	GUID_ENTRY_I( NV_ENC_VP8_PROFILE ),
-	GUID_ENTRY_I( NV_ENC_VC1_PROFILE_SIMPLE ),
-	GUID_ENTRY_I( NV_ENC_VC1_PROFILE_MAIN ),
-	GUID_ENTRY_I( NV_ENC_VC1_PROFILE_ADVANCED ),
-	GUID_ENTRY_I( NV_ENC_JPEG_PROFILE_BASELINE )
+	GUID_ENTRY_I( NV_ENC_H264_PROFILE_HIGH_444 ),
+//	GUID_ENTRY_I( NV_ENC_H264_PROFILE_SVC_TEMPORAL_SCALABILTY ),
+	GUID_ENTRY_I( NV_ENC_H264_PROFILE_CONSTRAINED_HIGH )
 };
 
 typedef enum
@@ -375,7 +369,9 @@ typedef enum
     NV_ENC_PRESET_HQ                        =3, // High Quality (HQ) Preset
     NV_ENC_PRESET_BD                        =4, // Blue Ray Preset
     NV_ENC_PRESET_LOW_LATENCY_HQ            =5, // Low Latancy High Quality (HQ) Preset
-    NV_ENC_PRESET_LOW_LATENCY_HP            =6  // Low Latancy High Performance (HP) Preset
+    NV_ENC_PRESET_LOW_LATENCY_HP            =6, // Low Latancy High Performance (HP) Preset
+    NV_ENC_PRESET_LOSSLESS_DEFAULT          =8,
+    NV_ENC_PRESET_LOSSLESS_HP               =9
 } enum_NV_ENC_PRESET;
 
 const st_guid_entry table_nv_enc_preset_names[] = {
@@ -385,7 +381,9 @@ const st_guid_entry table_nv_enc_preset_names[] = {
 	GUID_ENTRY_I( NV_ENC_PRESET_HQ ),
 	GUID_ENTRY_I( NV_ENC_PRESET_BD ), 
 	GUID_ENTRY_I( NV_ENC_PRESET_LOW_LATENCY_HQ ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_LOW_LATENCY_HP )
+	GUID_ENTRY_I( NV_ENC_PRESET_LOW_LATENCY_HP ),
+	GUID_ENTRY_I( NV_ENC_PRESET_LOSSLESS_DEFAULT ),
+    GUID_ENTRY_I( NV_ENC_PRESET_LOSSLESS_HP )
 };
 
 const st_guid_entry table_nv_enc_buffer_format_names[] = {
@@ -591,7 +589,10 @@ struct EncodeConfig
     unsigned int              idr_period;// I-frame don't re-use period
     NV_ENC_H264_ENTROPY_CODING_MODE vle_entropy_mode;// (high-profile only) enable CABAC
     NV_ENC_BUFFER_FORMAT      chromaFormatIDC;// chroma format
-	unsigned int              separate_color_plane; // (for YUV444 only)
+    unsigned int              useChroma444hack;// (4:4:4 only) use chromaformat hack to init session
+		// instead of passing to NV_ENC_BUFFER_FORMAT_YUV444_PL to OpenSession,
+		// use NV_ENC_BUFFER_FORMAT_NV12_TILED64x16
+	unsigned int              separateColourPlaneFlag; // (for YUV444 only)
     unsigned int              output_sei_BufferPeriod;
     NV_ENC_MV_PRECISION       mvPrecision; // 1=FULL_PEL, 2=HALF_PEL, 3= QUARTER_PEL
     int                       output_sei_PictureTime;
@@ -613,9 +614,14 @@ struct EncodeConfig
     int                       disableCodecCfg;
     unsigned int              useMappedResources;// enable 
     unsigned int              max_ref_frames; // maximum #reference frames (2 required for B-frames)
+    unsigned int              monoChromeEncoding;// monoChrome encoding
 
 	//NVENC API v3.0
 	unsigned int              enableVFR; // enable variable frame rate mode
+
+	//NVENC API v4.0
+	unsigned int              qpPrimeYZeroTransformBypassFlag;// (for lossless encoding: set to 1, else set 0)
+	unsigned int              enableAQ; // enable adaptive quantization
 
 	void print( string &stringout ) const;
 };
@@ -670,6 +676,11 @@ struct EncodeFrameConfig
     unsigned int newWidth;
     unsigned int newHeight;
     unsigned int dynBitrateChangeFlag;
+	uint32_t     ppro_pixelformat; // for EncodeFramePPro() [used by Adobe apps only]
+	bool         ppro_pixelformat_is_yuv420;
+	bool         ppro_pixelformat_is_uyvy422;
+	bool         ppro_pixelformat_is_yuyv422;
+	bool         ppro_pixelformat_is_yuv444;
 };
 
 struct FrameThreadData
@@ -691,11 +702,14 @@ struct EncoderGPUInfo
 
 class CNvEncoderThread;
 
+// {585D7FE6-531D-496c-856A-5DE6A39224A5} 
+	const GUID NV_CLIENT_KEY_TEST = { 0x585d7fe6, 0x531d, 0x496c, { 0x85, 0x6a, 0x5d, 0xe6, 0xa3, 0x92, 0x24, 0xa5 } };// works with 314.07
+
 // {D91132EC-C576-4f69-B668-B0690B0BE1C4}
 	const GUID NV_ENC_CLIENT_PRO_TRIAL  = { 0xd91132ec, 0xc576, 0x4f69, { 0xb6, 0x68, 0xb0, 0x69, 0xb, 0xb, 0xe1, 0xc4 } }; // error 21
 // // {73E2B513-A956-444e-8EF1-77A54A09F0BE}
 	const GUID NV_ENC_CLIENT_FREE_TRIAL = { 0x73e2b513, 0xa956, 0x444e, { 0x8e, 0xf1, 0x77, 0xa5, 0x4a, 0x9, 0xf0, 0xbe } };// works with 310.90, not with 314.07
-	const GUID NVENC_KEY = NV_ENC_CLIENT_PRO_TRIAL;
+	const GUID NVENC_KEY = NV_CLIENT_KEY_TEST;
 
 // The main Encoder Class interface
 class CNvEncoder
@@ -779,14 +793,14 @@ public:
     virtual HRESULT                                      InitializeEncoder() = 0;
     virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui ) = 0;
     virtual HRESULT                                      EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush=false) = 0;
-	virtual HRESULT                                      EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const bool bFlush=false) = 0;
+	virtual HRESULT                                      EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const bool bFlush) = 0;
     virtual HRESULT                                      EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUdeviceptr oFrame[], bool bFlush=false) = 0;
     virtual HRESULT                                      DestroyEncoder() = 0;
    
     virtual HRESULT                                      CopyBitstreamData(EncoderThreadData stThreadData);
     virtual HRESULT                                      CopyFrameData(FrameThreadData stFrameData);
 
-    virtual HRESULT                                      QueryEncodeCaps(NV_ENC_CAPS caps_type, int *p_nCapsVal);
+    HRESULT                                              QueryEncodeCaps(NV_ENC_CAPS caps_type, int *p_nCapsVal);
 	void PrintGUID( const GUID &guid) const;
 	void PrintEncodeFormats(string &s) const;
 	void PrintEncodeProfiles(string &s) const;
@@ -824,6 +838,7 @@ protected:
     HRESULT                                              WaitForCompletion();
 
     NV_ENC_REGISTER_RESOURCE                             m_RegisteredResource;
+    nv_enc_caps_s                                        m_nv_enc_caps; // capabilities of currently initialized encoder
 //	const cls_convert_guid<uint32_t> &m_preset_desc;// ( table_nv_enc_profiles, array_length(table_nv_enc_profiles) );
 //	const cls_convert_guid<uint32_t> &m_profile_desc; // = o_profile_desc; // ( table_nv_enc_profiles, array_length(table_nv_enc_profiles) );
 //	const cls_convert_guid<uint32_t> &m_codec_desc;// = o_codec_desc; // 

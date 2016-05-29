@@ -57,12 +57,49 @@
 #include <Windows.h> // SetFilePointer(), WriteFile()
 #include <sstream>  // ostringstream
 #include <cstdio>
+
 bool Check_prSuiteError( const prSuiteError errval, string &str );
+
 typedef union {
 	uint32_t  dword[1];
 	uint16_t  word[2];
 	uint8_t   byte[4];
 } dword_word_byte_u; // a 32-bit glob that is addressable as byte/word/dword
+
+// These pixelformats are used for NVENC chromaformatIDC = NV12.
+//    If the Adobe-app prefers BGRA instead of YUV420, then
+//    switch to the 422 formats below.
+const PrPixelFormat SupportedPixelFormats420[] ={
+	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709,
+	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709_FullRange,
+	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601,
+	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601_FullRange,
+	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709,
+	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709_FullRange,
+	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601,
+	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601_FullRange
+};
+
+// These pixelformats are used for NVENC chromatformatIDC = NV12
+//   (These are only used if YUV420 planar was attempted and failed.)
+const PrPixelFormat SupportedPixelFormats422[] ={
+	PrPixelFormat_YUYV_422_8u_709,
+	PrPixelFormat_UYVY_422_8u_709,
+	PrPixelFormat_YUYV_422_8u_601,
+	PrPixelFormat_UYVY_422_8u_601
+};
+
+
+// These pixelformats are used for NVENC chromaformatIDC = YUV444
+//  (requires NV_ENC_CAPS_SUPPORT_YUV444_ENCODE == 1)
+const PrPixelFormat SupportedPixelFormats444[] ={
+	PrPixelFormat_VUYX_4444_8u_709,
+	PrPixelFormat_VUYA_4444_8u_709,
+	PrPixelFormat_VUYX_4444_8u,
+	PrPixelFormat_VUYA_4444_8u
+};
+
+
 
 typedef struct {
 dword_word_byte_u ChunkID;		// 0         4   ChunkID          Contains the letters "RIFF" in ASCII form
@@ -386,6 +423,8 @@ adobe2wav_audio51_swap_ssse3(
 	__m128i write_temp[3] = {0};
 	__m128i write_fixup[4] = {0};
 
+	// m128_u : abstract data-strut to represent a 128-bit SSE2 (XMM) register
+
 	typedef __declspec(align(16)) union {
 	    __m128i  xmm;   // the SSE2 register
 	    uint8_t  b[16]; // byte arrangement
@@ -393,6 +432,19 @@ adobe2wav_audio51_swap_ssse3(
 	    uint32_t d[4];  // dword arrangement
 	    uint64_t q[2];  // qword arrangement
 	} m128_u;
+
+	// _m128u_word(): generate a 16-bit mask-value for 2nd-operand of 'PSHUFB',
+	//                for selecting a 16-bit word from the 128-bit source reg
+	//             bit#127                                 bit#0
+	//                :____ ____ ____ ____ ____ ____ ____ ____:
+	//                | w7 | w6 | w5 | w4 | w3 | w2 | w1 | w0 |   source_reg
+	//
+	//                Each word (w0..w7) is 16-bits wide
+	//
+	//                Let src_word_index = {0..7}  (selects 1 word from #{0..7})
+	//                mask_bit: 0 = copy (copy word[i] from source to dest)
+	//                          1 = zero (zero out the dest field)
+
 #define _m128u_word(src_word_index, mask_bit) ( \
 	(  (mask_bit) ? 0x80 : ( (src_word_index)<<1 ) ) & 0xFF | \
 	( ((mask_bit) ? 0x80 : ( ((src_word_index)<<1)+1)) << 8 ) & 0xFF00 \
@@ -1048,26 +1100,11 @@ void AddRowPadding(	char			*srcFrame,
 	return;
 }
 
-// These pixelformats are used for  NVENC chromaformatIDC = NV12
-const PrPixelFormat SupportedPixelFormats420[] ={
-	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709,
-	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709_FullRange,
-	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601,
-	PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601_FullRange,
-	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709,
-	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709_FullRange,
-	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601,
-	PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601_FullRange
-};
-
-// These pixelformats are used for NVENC chromaformatIDC = YUV444
-//  (requires NV_ENC_CAPS_SUPPORT_SEPARATE_COLOUR_PLANE == 1)
-const PrPixelFormat SupportedPixelFormats444[] ={
-	PrPixelFormat_VUYX_4444_8u_709,
-	PrPixelFormat_VUYA_4444_8u_709,
-	PrPixelFormat_VUYX_4444_8u,
-	PrPixelFormat_VUYA_4444_8u
-};
+#define _SafeReportEvent( id, eventtype, title, desc) \
+	if ( !pre11_suppress_messages ) \
+		mySettings->exporterUtilitySuite->ReportEventA( \
+			id, eventtype, title, desc \
+		);
 
 // Returns malNoError if successful, or comp_CompileAbort if user aborted
 prMALError RenderAndWriteVideoFrame(
@@ -1096,14 +1133,24 @@ prMALError RenderAndWriteVideoFrame(
 								*v410Buffer				= NULL;
 	HWND mainWnd                        = mySettings->windowSuite->GetMainWindow();
 	SequenceRender_ParamsRec renderParms;
-	//PrPixelFormat pixelFormats[] = {PrPixelFormat_BGRA_4444_8u, PrPixelFormat_BGRA_4444_8u};
+
+	// logmessage generation
+	std::wostringstream os;
+	prUTF16Char eventTitle[256];
+	prUTF16Char eventDesc[512];
+	bool pre11_suppress_messages = false; // workaround for Premiere Elements 11, don't call ReportEvent
+
 	PrPixelFormat *pixelFormats = NULL;
 	csSDK_int32 nvenc_pixelformat; // selected NVENC input pixelFormat (user-parameter from plugin)
-	bool        use_yuv444;        // a 4:4:4 format is in use (instead of 4:2:0)
-
 	mySettings->exportParamSuite->GetParamValue(exID, 0, ParamID_chromaFormatIDC, &temp_param);
 	nvenc_pixelformat = temp_param.value.intValue;
-	use_yuv444 = (nvenc_pixelformat >= NV_ENC_BUFFER_FORMAT_YUV444_PL);
+	
+	// Frmaebuffer format flags: what chromaformat video is Adobe-app outputting?
+	//   Exactly one of the following flags must be true.
+	// 
+	const bool adobe_yuv444 = (nvenc_pixelformat >= NV_ENC_BUFFER_FORMAT_YUV444_PL);// a 4:4:4 format is in use (instead of 4:2:0)
+	bool adobe_yuv420 = false;// (Adobe is outputing YUV420, i.e. 'YV12')
+	bool adobe_yuv422 = false;// (Adobe is outputing YUV420, i.e. 'YV12')
 
 
 	if ( isFrame0 ) {
@@ -1131,15 +1178,20 @@ prMALError RenderAndWriteVideoFrame(
 
 		if ( mySettings->forced_PixelFormat0 ) {
 			// autoselect-disabled:  only the user-select pixelformat will be advertised.
-			renderParms.inRequestedPixelFormatArray = &mySettings->requested_PixelFormat0;
+			renderParms.inRequestedPixelFormatArray = &(mySettings->requested_PixelFormat0);
 			renderParms.inRequestedPixelFormatArrayCount = 1;
 		}
-		else if ( use_yuv444 ) {
+		else if ( adobe_yuv444 ) {
 			// Packed Pixel YUV 4:4:4 (24bpp + 8bit alpha, NVECN doesn't use the alpha-channel)
+			//
+			// Assume NVENC is configured to encode 4:4:4 video. 
+			// (because we never send packed YUV 4:4:4 to NVENC. in 4:2:0 H264 encoding mode)
 			renderParms.inRequestedPixelFormatArray = SupportedPixelFormats444;
 			renderParms.inRequestedPixelFormatArrayCount = sizeof(SupportedPixelFormats444)/sizeof(SupportedPixelFormats444[0]);
 		}
 		else {
+			// Assume NVENC is configured to encode 4:2:0 video.
+			//
 			// Planar YUV 4:2:0
 			renderParms.inRequestedPixelFormatArray = SupportedPixelFormats420;
 			renderParms.inRequestedPixelFormatArrayCount = sizeof(SupportedPixelFormats420)/sizeof(SupportedPixelFormats420[0]);
@@ -1181,6 +1233,57 @@ prMALError RenderAndWriteVideoFrame(
 					&renderParms,
 					kRenderCacheType_None,	// [TODO] Try different settings
 					&renderResult);
+
+		// Kludge for Adobe YUV_420_Planar format incompatiblity with most MPE hardware effects
+		//
+		// Problem:
+		// --------
+		// When the MPE (mercury playback engine) is configured to use CPU-only (software),
+		// the Adobe videorender will accept any requested PrPixelFormat (including our preferred 420_Planar
+		// formats.)
+		//
+		// When MPE is configured to use hardware-acceleration (CUDA), *and* an MPE-accelerated effect
+		// is present & enabled anywhere in the exported video timeline, then RenderVideoFrame() will
+		// return an error code if the <renderParms.inRequestedPixelFormatArray> contains any entries of
+		// the Planar_420 type.
+		//
+		// Workaround:
+		// -----------
+		// The above problem is fixed by making another request with <renderParms.inRequestedPixelFormatArray> 
+		// containing nothing but packed-pixel YUV entries (in our case, UYVY422/YUYV422.)  For some reason,
+		// combining both Planar & packed-pixel422 in the same Array, still causes an error.  So we
+		// let the first render attempt (with YUV420planar) fail, and then make a second attempt with the
+		// packed422 formats.
+
+		if ( PrSuiteErrorFailed(resultS) && !adobe_yuv444) {
+			// chromaFormat: YUV420
+
+			// The videorender failed with our requested Planar YUV 4:2:0 formats.
+			//
+			// Inform the user: Write informational message to Adobe's log:
+			//    which pixelformat did Adobe choose for us?
+			os.clear();
+			os.flush();
+			os << "Video Frame#0 info: Adobe failed to render output to requested YUV_420_Planar pixelformat(s)";
+			os << "'" << std::endl;
+			copyConvertStringLiteralIntoUTF16( os.str().c_str(), eventDesc);
+			copyConvertStringLiteralIntoUTF16(L"Note from RenderAndWriteVideoFrame()", eventTitle);
+			_SafeReportEvent( 
+				exID, PrSDKErrorSuite3::kEventTypeWarning, eventTitle, eventDesc
+			);
+
+
+			//    ... so retry the videorender with YUV 4:2:2 packed-pixel instead
+			renderParms.inRequestedPixelFormatArray = SupportedPixelFormats422;
+			renderParms.inRequestedPixelFormatArrayCount = sizeof(SupportedPixelFormats422)/sizeof(SupportedPixelFormats422[0]);
+
+			resultS = mySettings->sequenceRenderSuite->RenderVideoFrame(
+					mySettings->videoRenderID,
+					videoTime,
+					&renderParms,
+					kRenderCacheType_None,	// [TODO] Try different settings
+					&renderResult);
+		}
 
 		if ( PrSuiteErrorFailed(resultS) ) {
 			ostringstream o;
@@ -1259,6 +1362,28 @@ prMALError RenderAndWriteVideoFrame(
 		}
 
 		mySettings->rendered_PixelFormat0 = renderedPixelFormat;
+
+		// tell the user which PrPixelFormat Adobe will use to render the whole video
+		os.clear();
+		os.flush();
+		os << "Video Frame#0 info: Adobe chose '";
+		for( unsigned i = 0; i < 4; ++i )
+			os <<  (static_cast<char>((renderedPixelFormat >> (i<<3)) & 0xFFU));
+
+		os << "'" << std::endl;
+		copyConvertStringLiteralIntoUTF16( os.str().c_str(), eventDesc);
+		copyConvertStringLiteralIntoUTF16(L"Note from RenderAndWriteVideoFrame()", eventTitle);
+		_SafeReportEvent( 
+			exID, PrSDKErrorSuite3::kEventTypeWarning, eventTitle, eventDesc
+		);
+
+		// update the chroma-format flags: we're either in 422 or 420 mode
+		//
+		// 
+		if ( PrPixelFormat_is_YUV420(renderedPixelFormat) )
+			adobe_yuv420 = true;
+		else if ( PrPixelFormat_is_YUV422(renderedPixelFormat) )
+			adobe_yuv422 = true;
 	} 
 	else {
 		// All later frames: force Adobe to conform to the *same* PrPixelFormat
@@ -1273,8 +1398,6 @@ prMALError RenderAndWriteVideoFrame(
 		Check_prSuiteError(resultS, errstr );
 	}
 
-//	renderedPixelSize = GetPixelFormatSize(renderedPixelFormat);
-
 	// If user hit cancel
 	if (resultS == suiteError_CompilerCompileAbort)
 	{
@@ -1285,6 +1408,18 @@ prMALError RenderAndWriteVideoFrame(
 	EncodeFrameConfig nvEncodeFrameConfig = {0};
 	nvEncodeFrameConfig.height = height.value.intValue;
 	nvEncodeFrameConfig.width  = width.value.intValue;
+
+	// CNvEncoderH264 must know the source-video's pixelformat, in order to
+	//    convert it into an NVENC compatible format (NV12 or YUV444)
+	nvEncodeFrameConfig.ppro_pixelformat = mySettings->rendered_PixelFormat0;
+	nvEncodeFrameConfig.ppro_pixelformat_is_yuv420 = PrPixelFormat_is_YUV420( mySettings->rendered_PixelFormat0 );
+	nvEncodeFrameConfig.ppro_pixelformat_is_yuv444 = PrPixelFormat_is_YUV444( mySettings->rendered_PixelFormat0 );
+	nvEncodeFrameConfig.ppro_pixelformat_is_uyvy422 = 
+		(mySettings->rendered_PixelFormat0 == PrPixelFormat_UYVY_422_8u_601) ||
+		(mySettings->rendered_PixelFormat0 == PrPixelFormat_UYVY_422_8u_709);
+	nvEncodeFrameConfig.ppro_pixelformat_is_yuyv422 = 
+		(mySettings->rendered_PixelFormat0 == PrPixelFormat_YUYV_422_8u_601) ||
+		(mySettings->rendered_PixelFormat0 == PrPixelFormat_YUYV_422_8u_709);
 
 	// NVENC picture-type: Interlaced vs Progressive
 	//
@@ -1305,7 +1440,7 @@ prMALError RenderAndWriteVideoFrame(
 		nvEncodeFrameConfig.topField = (seqFieldOrder.mInt32 == prFieldsLowerFirst) ? false : true;
 	}
 
-	if ( use_yuv444 ) {
+	if ( adobe_yuv444 || adobe_yuv422 ) {
 		// 4:4:4 packed pixel - only pointer[0] is used, (1 & 2 aren't)
 		mySettings->ppixSuite->GetPixels(	renderResult.outFrame,
 											PrPPixBufferAccess_ReadOnly,
@@ -1349,7 +1484,10 @@ prMALError RenderAndWriteVideoFrame(
 	//       NVENC has completed encoding of this frame.
 	HRESULT hr = S_OK;
 	if ( !dont_encode )
-		hr = mySettings->p_NvEncoder->EncodeFramePPro( &nvEncodeFrameConfig, false );
+		hr = mySettings->p_NvEncoder->EncodeFramePPro( 
+			&nvEncodeFrameConfig, 
+			false  // flush?
+		);
 				
 	// Now that buffer is written to disk, we can dispose of memory
 	mySettings->ppixSuite->Dispose(renderResult.outFrame);

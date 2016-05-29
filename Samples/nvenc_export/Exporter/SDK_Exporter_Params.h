@@ -34,6 +34,7 @@
 #define		ParamID_GPUSelect_GPUIndex		"ParamID_GPUSelect_GPUIndex" // GPU index# (int)
 #define		ParamID_GPUSelect_Report_VRAM	"ParamID_GPUSelect_Report_VRAM" // (read-only) Video RAM (MBytes)
 #define		ParamID_GPUSelect_Report_CCAP	"ParamID_GPUSelect_Report_CCAP"   // (read-only) compute-capability ("3.0, 3.5, ...")
+#define		ParamID_GPUSelect_Report_CV		"ParamID_GPUSelect_Report_CV"// NVidia CUDA   Version
 #define		ParamID_GPUSelect_Report_DV		"ParamID_GPUSelect_Report_DV"// NVidia driver Version
 
 
@@ -74,6 +75,9 @@
         MAKE_PARAM_STRING(NV_ENC_CAPS_PREPROC_SUPPORT)
         MAKE_PARAM_STRING(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT)
 		MAKE_PARAM_STRING(NV_ENC_CAPS_MB_NUM_MAX)
+		MAKE_PARAM_STRING(NV_ENC_CAPS_MB_PER_SEC_MAX)
+		MAKE_PARAM_STRING(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE)
+		MAKE_PARAM_STRING(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE)
 
 #define		GroupName_TopVideo		L"Sample top-level video param group"
 #define		GroupName_VideoCodec	L"Video codec group"
@@ -137,6 +141,8 @@
 		#define LParamID_NV_ENC_LEVEL_H264 L"NV_ENC_LEVEL_H264"
 		#define ParamID_gopLength "gopLength"
 		#define LParamID_gopLength L"gopLength"
+		#define ParamID_monoChromeEncoding "monoChromeEncoding"
+		#define LParamID_monoChromeEncoding L"monoChromeEncoding"
 		//#define "idr_period" // TODO: CNvEncoder ignores this value
 		#define ParamID_max_ref_frames "max_ref_frames"
 		#define LParamID_max_ref_frames L"max_ref_frames"
@@ -186,6 +192,10 @@
 		#define LParamID_vle_entropy_mode L"vle_entropy_mode"
 		#define ParamID_chromaFormatIDC "chromaFormatIDC"
 		#define LParamID_chromaFormatIDC L"chromaFormatIDC"
+		#define ParamID_useChroma444hack "useChroma444hack"
+		#define LParamID_useChroma444hack L"useChroma444hack"
+		#define ParamID_separateColourPlaneFlag "separateColourPlaneFlag"
+		#define LParamID_separateColourPlaneFlag L"separateColourPlaneFlag"
 		#define ParamID_NV_ENC_MV_PRECISION "NV_ENC_MV_PRECISION"
 		#define LParamID_NV_ENC_MV_PRECISION L"NV_ENC_MV_PRECISION"
 		#define ParamID_disable_deblocking "disable_deblocking"
@@ -198,6 +208,10 @@
 		#define LParamID_syncMode L"syncMode"
 		#define ParamID_enableVFR "enableVFR"
 		#define LParamID_enableVFR L"enableVFR"
+		#define ParamID_enableAQ "enableAQ"
+		#define LParamID_enableAQ L"enableAQ"
+		#define ParamID_qpPrimeYZeroTransformBypassFlag "qpPrimeYZeroTransformBypassFlag"
+		#define LParamID_qpPrimeYZeroTransformBypassFlag L"qpPrimeYZeroTransformBypassFlag"
 		#define ParamID_forced_PrPixelFormat "forced_PrPixelFormat"
 		#define LParamID_forced_PrPixelFormat L"forced_PrPixelFormat"
 
@@ -271,6 +285,12 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 bool
 PrPixelFormat_is_YUV420( const PrPixelFormat p );
 
+bool
+PrPixelFormat_is_YUV422( const PrPixelFormat p );
+
+bool
+PrPixelFormat_is_YUV444( const PrPixelFormat p );
+
 void
 NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s);
 
@@ -310,7 +330,7 @@ update_exportParamSuite_GPUSelectGroup(
 	const int GPUIndex,   // GPU-ID#, '-1' means NO NVidia GPUs found
 	const NvEncoderGPUInfo_s &gpuinfo );
 
-void
+bool
 update_exportParamSuite_NVENCCfgGroup(
 	const csSDK_uint32 exID,
 	ExportSettings *lRec);

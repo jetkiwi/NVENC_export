@@ -20,10 +20,12 @@
 /*******************************************************************/
 
 #include "SDK_Exporter_Params.h"
-#include <cuda.h>
 #include <cstdio>
 #include <sstream>
 #include <vector>
+
+#include <nvapi.h> // NVidia NVAPI - functions to query system-info (eg. version of Geforce driver)
+#include <cuda.h>
 #include "helper_cuda.h"
 
 #include "CNvEncoder.h"
@@ -127,7 +129,7 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 	// create an enumerated list of Adobe PrPixelFormats; to
 	// assign each PrPixelFormat an index 
 	const st_guid_entry table_PrPixelFormat[] = {
-		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709),// 4:2:0 planar
 		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709_FullRange),
 		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601),
 		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_601_FullRange),
@@ -135,10 +137,16 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709_FullRange),
 		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601),
 		GUID_ENTRY(NO_GUID, PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601_FullRange),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_YUYV_422_8u_709),  // 16bpp packed-pixel (4:2:2)
+		GUID_ENTRY(NO_GUID, PrPixelFormat_UYVY_422_8u_709),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_YUYV_422_8u_601),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_UYVY_422_8u_601),
+		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYX_4444_8u_709), // 32bpp packed-pixel (4:4:4)
+		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u_709),
 		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYX_4444_8u),
-		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYX_4444_8u_709),
-		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u),
-		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u_709)
+		GUID_ENTRY(NO_GUID, PrPixelFormat_VUYA_4444_8u)
+//		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRX_4444_8u), // fallback, if YUV-output isn't supported
+//		GUID_ENTRY(NO_GUID, PrPixelFormat_BGRA_4444_8u)
 	};
 
 	const cls_convert_guid desc_PrPixelFormat = cls_convert_guid(
@@ -148,6 +156,7 @@ update_exportParamSuite_GPUSelectGroup_GPUIndex(
 bool
 PrPixelFormat_is_YUV420( const PrPixelFormat p )
 {
+	// returns: true if 'p' is a Yuv420 planar format
 	switch( p ) {
 		case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709:
 		case PrPixelFormat_YUV_420_MPEG4_FRAME_PICTURE_PLANAR_8u_709_FullRange:
@@ -157,6 +166,38 @@ PrPixelFormat_is_YUV420( const PrPixelFormat p )
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_709_FullRange:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601:
 		case PrPixelFormat_YUV_420_MPEG2_FRAME_PICTURE_PLANAR_8u_601_FullRange:
+			return true;
+			break;
+	}
+
+	return false;
+}
+
+bool
+PrPixelFormat_is_YUV422( const PrPixelFormat p )
+{
+	// returns: true if 'p' is a 16bpp packed-pixel format (4:2:2)
+	switch( p ) {
+		case PrPixelFormat_YUYV_422_8u_709:
+		case PrPixelFormat_UYVY_422_8u_709:
+		case PrPixelFormat_YUYV_422_8u_601:
+		case PrPixelFormat_UYVY_422_8u_601:
+			return true;
+			break;
+	}
+
+	return false;
+}
+
+bool
+PrPixelFormat_is_YUV444( const PrPixelFormat p )
+{
+	// returns: true if 'p' is a Yuv444 32bpp packed-pixel format
+	switch( p ) {
+		case PrPixelFormat_VUYX_4444_8u_709:
+		case PrPixelFormat_VUYA_4444_8u_709:
+		case PrPixelFormat_VUYX_4444_8u:
+		case PrPixelFormat_VUYA_4444_8u:
 			return true;
 			break;
 	}
@@ -211,7 +252,9 @@ NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s)
 	QUERY_PRINT_CAP(NV_ENC_CAPS_PREPROC_SUPPORT);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_NUM_MAX); // broken in 320.79 driver, works in 334.89 WHQL driver
-
+	QUERY_PRINT_CAP(NV_ENC_CAPS_MB_PER_SEC_MAX); // broken in 320.79 driver, works in 334.89 WHQL driver
+	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE); 
+	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE);
 /*
 	for(unsigned i = 0; i < m_dwInputFmtCount; ++i ) {
 		string s;
@@ -670,8 +713,10 @@ prMALError exSDKGenerateDefaultParams(
 	// (Read-only) Report CUDA ComputeCapability (3.0, 3.5, ...)
 	Add_NVENC_Param_int( GroupID_GPUSelect, ParamID_GPUSelect_Report_CCAP, 0, MAX_POSITIVE, 0)
 
-	// (Read-only) Report NvIdia Driver Version
+	// (Read-only) Report NvIdia Driver and CUDA-library Version
 	Add_NVENC_Param_int( GroupID_GPUSelect, ParamID_GPUSelect_Report_DV, 0, MAX_POSITIVE, 0)
+	Add_NVENC_Param_int( GroupID_GPUSelect, ParamID_GPUSelect_Report_CV, 0, MAX_POSITIVE, 0)
+
 	Add_NVENC_Param_button( GroupID_GPUSelect, ParamID_NVENC_Info_Button, exParamFlag_none );
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -683,8 +728,8 @@ prMALError exSDKGenerateDefaultParams(
 //    unsigned int              profile;// Base Profile, Main Profile, High Profile, etc.
 //    unsigned int              level;     // encode level setting (41 = bluray)
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_CODEC, 0, MAX_POSITIVE, NV_ENC_CODEC_H264)
-	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_PRESET, 0, MAX_POSITIVE, NV_ENC_PRESET_BD)
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_H264_PROFILE, 0, MAX_POSITIVE, NV_ENC_H264_PROFILE_HIGH)
+	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_PRESET, 0, MAX_POSITIVE, NV_ENC_PRESET_BD)
 
 	bool res1080p_or_less = (seqWidth.mInt32 * seqHeight.mInt32) <= (1920*1080);
 	unsigned dflt_nv_enc_level_h264;
@@ -700,6 +745,12 @@ prMALError exSDKGenerateDefaultParams(
 		dflt_nv_enc_level_h264 = NV_ENC_LEVEL_H264_51;
 
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_LEVEL_H264, 0, MAX_POSITIVE, dflt_nv_enc_level_h264)
+
+//    unsigned int              chromaFormatIDC;// chroma format
+	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_chromaFormatIDC, 0, MAX_POSITIVE, NV_ENC_BUFFER_FORMAT_NV12_TILED64x16)
+
+//    unsigned int              useChroma444hack;// (4:4:4 only) use chromaformat hack to init session
+	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_useChroma444hack, true)
 
 	//    int                       preset;
 //    unsigned int              application; // 0=default, 1= HP, 2= HQ, 3=VC, 4=WIDI, 5=Wigig, 6=FlipCamera, 7=BD, 8=IPOD
@@ -727,7 +778,9 @@ prMALError exSDKGenerateDefaultParams(
 	unsigned dflt_gopLength = default_video_fps; 
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_gopLength, 1, MAX_POSITIVE, dflt_gopLength)
 
-	// hmm, Adobe Bug?  Can't initialize the OptionalparamEnabled field to a non-false value!
+	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_monoChromeEncoding, 0)
+
+// hmm, Adobe Bug?  Can't initialize the OptionalparamEnabled field to a non-false value!
 	//Add_NVENC_Param_int_dh_optional( GroupID_NVENCCfg, ParamID_gopLength, 1, MAX_POSITIVE, dflt_gopLength, kPrTrue, kPrFalse, kPrFalse )
 
 	//Add_NVENC_Param_int( GroupID_NVENCCfg, "idr_period", 1, MAX_POSITIVE, 23) // TODO: CNvEncoder ignores this value
@@ -755,6 +808,9 @@ prMALError exSDKGenerateDefaultParams(
 //				when rate_Control==VBR.  Workaround: set to Constant-QP
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_rateControl, 0, MAX_POSITIVE, 
 		res1080p_or_less ? NV_ENC_PARAMS_RC_VBR : NV_ENC_PARAMS_RC_CONSTQP )
+
+//    unsigned int              qpPrimeYZeroTransformBypassFlag;// (for lossless encoding: set to 1, else set 0)
+	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_qpPrimeYZeroTransformBypassFlag, false)
 
 //    unsigned int              qpI; // Quality:  I-frame (for QP rateControl)
 //    unsigned int              qpP; // Quality: P-frame (...)
@@ -810,8 +866,8 @@ prMALError exSDKGenerateDefaultParams(
 //    unsigned int              vle_entropy_mode;// (high-profile only) enable CABAC
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_vle_entropy_mode, 0, MAX_POSITIVE, NV_ENC_H264_ENTROPY_CODING_MODE_CABAC)
 
-//    unsigned int              chromaFormatIDC;// chroma format
-	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_chromaFormatIDC, 0, MAX_POSITIVE, NV_ENC_BUFFER_FORMAT_NV12_TILED64x16)
+//    unsigned int              separate_color_plane;// encode pictures as 3 independent color planes?
+	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_separateColourPlaneFlag, false)
 
 //    unsigned int              output_sei_BufferPeriod;
 //    NV_ENC_MV_PRECISION       mvPrecision; // 1=FULL_PEL, 2=HALF_PEL, 3= QUARTER_PEL
@@ -844,6 +900,8 @@ prMALError exSDKGenerateDefaultParams(
 //    unsigned int              useMappedResources;// enable 
 
 	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_enableVFR, false)
+
+	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_enableAQ, false)
 
 ///////////////////////////////////////////////////////////////////////////////
 // Codec Param Group
@@ -1255,7 +1313,7 @@ void update_exportParamSuite_GPUSelectGroup(
 	//
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 		0,
-		ParamID_GPUSelect_Report_DV);
+		ParamID_GPUSelect_Report_CV);
 	{
 		// convert <major>.<minor> into a wchar_t[] text-string, then to tempString[]>
 		std::wostringstream oss; // output stream for wide-text conversion
@@ -1269,9 +1327,51 @@ void update_exportParamSuite_GPUSelectGroup(
 		vr.intValue = 0;
 		lRec->exportParamSuite->AddConstrainedValuePair(	exID,
 			0,
+			ParamID_GPUSelect_Report_CV,
+			&vr,
+			tempString);
+		// update this parameter's flag 'Hidden'
+		lRec->exportParamSuite->ChangeParam( 
+			exID,
+			0,
+			ParamID_GPUSelect_Report_CV,
+			&intValue
+		);
+	}
+
+	//
+	// GPU driver version
+	//
+	lRec->exportParamSuite->ClearConstrainedValues(	exID,
+		0,
+		ParamID_GPUSelect_Report_DV);
+	{
+		// Get the Geforce driver-version using NVAPI -
+		//   NVENC functionality is a hardware+firmware implementation, so it is important
+		//   to report both the GPU-hardware and the Geforce driver revision.
+		NvU32             NVidia_DriverVersion;
+		NvAPI_ShortString szBuildBranchString;
+		NvAPI_Status      nvs = NvAPI_SYS_GetDriverAndBranchVersion( &NVidia_DriverVersion, szBuildBranchString);
+
+
+		// convert <major>.<minor> into a wchar_t[] text-string, then to tempString[]>
+		std::wostringstream oss; // output stream for wide-text conversion
+		if ( nvs == NVAPI_OK )
+			oss << szBuildBranchString << "  (" << std::dec 
+				<< static_cast<unsigned>(NVidia_DriverVersion / 100)  << "."
+				<< std::dec << static_cast<unsigned>(NVidia_DriverVersion % 100) << ")";
+		else
+			oss << "??UNKNOWN??";
+
+		copyConvertStringLiteralIntoUTF16(oss.str().c_str(), tempString );
+
+		vr.intValue = 0;
+		lRec->exportParamSuite->AddConstrainedValuePair(	exID,
+			0,
 			ParamID_GPUSelect_Report_DV,
 			&vr,
 			tempString);
+
 		// update this parameter's flag 'Hidden'
 		lRec->exportParamSuite->ChangeParam( 
 			exID,
@@ -1280,11 +1380,10 @@ void update_exportParamSuite_GPUSelectGroup(
 			&intValue
 		);
 	}
-
 }
 
 
-void
+bool
 update_exportParamSuite_NVENCCfgGroup(
 	const csSDK_uint32 exID,
 	ExportSettings *lRec)
@@ -1298,6 +1397,7 @@ update_exportParamSuite_NVENCCfgGroup(
 	nv_enc_caps_s           nv_enc_caps = {0};
 	HRESULT                 hr = S_FALSE; // fail
 	
+	bool    need_to_update_videogroup = false;
 	bool	nvenc_supported;
 	int						val;// temporary var (for macro-use)
 	exOneParamValueRec		vr; // temporary var (for macro-use)
@@ -1309,7 +1409,7 @@ update_exportParamSuite_NVENCCfgGroup(
 	csSDK_int32		mgroupIndex = 0;
 	
 	if ( paramSuite == NULL ) // TODO trap error
-		return;
+		return need_to_update_videogroup;
 
 	// Get the current selection for GPUIndex
 	paramSuite->GetParamValue(exID, mgroupIndex, ParamID_GPUSelect_GPUIndex, &exParamValue_GPUIndex);
@@ -1403,15 +1503,19 @@ update_exportParamSuite_NVENCCfgGroup(
 	
 	if ( !nvenc_supported ) {
 		_ClearAndDisableParam( ParamID_NV_ENC_CODEC );
-		_ClearAndDisableParam( ParamID_NV_ENC_PRESET );
 		_ClearAndDisableParam( ParamID_NV_ENC_H264_PROFILE );
+		_ClearAndDisableParam( ParamID_NV_ENC_PRESET );
 		_ClearAndDisableParam( ParamID_NV_ENC_LEVEL_H264 );
+		_ClearAndDisableParam( ParamID_chromaFormatIDC );
+		_ClearAndDisableParam( ParamID_useChroma444hack );
 		_ClearAndDisableParam( ParamID_gopLength );
+		_ClearAndDisableParam( ParamID_monoChromeEncoding );
 		//_ClearAndDisableParam( "idr_period" );// TODO: CNvEncoder ignores this value
 		_ClearAndDisableParam( ParamID_max_ref_frames );
 		_ClearAndDisableParam( ParamID_numBFrames );
 		_ClearAndDisableParam( ParamID_FieldEncoding );
 		_ClearAndDisableParam( ParamID_rateControl );
+		_ClearAndDisableParam( ParamID_qpPrimeYZeroTransformBypassFlag );
 		_ClearAndDisableParam( ParamID_vbvBufferSize );
 		_ClearAndDisableParam( ParamID_vbvInitialDelay );
 		_ClearAndDisableParam( ParamID_qpI );
@@ -1431,15 +1535,16 @@ update_exportParamSuite_NVENCCfgGroup(
 		_ClearAndDisableParam( ParamID_hierarchicalB );
 		_ClearAndDisableParam( ParamID_numSlices );
 		_ClearAndDisableParam( ParamID_vle_entropy_mode );
-		_ClearAndDisableParam( ParamID_chromaFormatIDC );
+		_ClearAndDisableParam( ParamID_separateColourPlaneFlag );
 		_ClearAndDisableParam( ParamID_NV_ENC_MV_PRECISION );
 		_ClearAndDisableParam( ParamID_disable_deblocking );
 		_ClearAndDisableParam( ParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM );
 		_ClearAndDisableParam( ParamID_NV_ENC_H264_BDIRECT_MODE );
 		_ClearAndDisableParam( ParamID_syncMode );
 		_ClearAndDisableParam( ParamID_enableVFR );
+		_ClearAndDisableParam( ParamID_enableAQ );
 
-		return;
+		return need_to_update_videogroup;
 	}
 	
 	//////////////////////////
@@ -1467,28 +1572,15 @@ update_exportParamSuite_NVENCCfgGroup(
 	}
 
 	////////////////////////////
-	
-	lRec->exportParamSuite->ClearConstrainedValues(	exID,
-		0,
-		ParamID_NV_ENC_PRESET);
-
-	//HRESULT hr_getpresetconfig = enc->GetPresetConfig(0);
-	for(unsigned i = 0; i < enc->m_dwCodecPresetGUIDCount; ++i ) {
-		desc_nv_enc_preset_names.guid2string( enc->m_stCodecPresetGUIDArray[i], s);
-		desc_nv_enc_preset_names.guid2value( enc->m_stCodecPresetGUIDArray[i], val);
-		_AddConstrainedIntValuePair(ParamID_NV_ENC_PRESET)
-	}
-
-	if ( enc->m_dwCodecPresetGUIDCount == 0 ) {
-		s = "ERROR, NO SUPPORT";
-		val = 0;
-		_AddConstrainedIntValuePair(ParamID_NV_ENC_PRESET)
-	}
-
-	////////////////////////////
 	// constraint due to Profile:
-	exParamValues profileValue;
-	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_NV_ENC_H264_PROFILE, &profileValue);
+	enum_NV_ENC_H264_PROFILE profileValue;
+
+	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_NV_ENC_H264_PROFILE, &exParamValue_temp);
+	profileValue = static_cast<enum_NV_ENC_H264_PROFILE>(exParamValue_temp.value.intValue);
+
+	// kludge: if 'autoselect' is picked, then assume we are operating at HIGH profile.
+	if ( profileValue == NV_ENC_H264_PROFILE_AUTOSELECT )
+		profileValue = NV_ENC_H264_PROFILE_HIGH;
 
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 		0,
@@ -1498,10 +1590,15 @@ update_exportParamSuite_NVENCCfgGroup(
 		desc_nv_enc_profile_names.guid2string( enc->m_stCodecProfileGUIDArray[i], s);
 		desc_nv_enc_profile_names.guid2value( enc->m_stCodecProfileGUIDArray[i], val);
 
+		// If HIGH_444 is not supported, then manually disable the HIGH_444 profile 
+		if ( s == "NV_ENC_H264_PROFILE_HIGH_444_GUID" && !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_YUV444_ENCODE )
+			continue;
+
 		// kludge: if nv_enc_caps reports MVC not supported, then manually disable the STEREO profile 
-		if ( !(s == "NV_ENC_H264_PROFILE_STEREO_GUID" && !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_STEREO_MVC) ) {
-			_AddConstrainedIntValuePair(ParamID_NV_ENC_H264_PROFILE)
-		}
+		if ( s == "NV_ENC_H264_PROFILE_STEREO_GUID" ) // && !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_STEREO_MVC )
+			continue; // always disable STEREO_GUID (nvenc_export doesn't support MVC)
+
+		_AddConstrainedIntValuePair(ParamID_NV_ENC_H264_PROFILE)
 	}
 
 	if ( enc->m_dwCodecProfileGUIDCount == 0 ) {
@@ -1509,6 +1606,64 @@ update_exportParamSuite_NVENCCfgGroup(
 		val = 0;
 		_AddConstrainedIntValuePair(ParamID_NV_ENC_H264_PROFILE)
 	}
+
+	////////////////////////////
+	// constraint due to Preset:
+	exParamValues presetValue;
+
+	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_NV_ENC_PRESET, &presetValue);
+	
+	lRec->exportParamSuite->ClearConstrainedValues(	exID,
+		0,
+		ParamID_NV_ENC_PRESET);
+
+	//HRESULT hr_getpresetconfig = enc->GetPresetConfig(0);
+	for(unsigned i = 0; i < enc->m_dwCodecPresetGUIDCount; ++i ) {
+		desc_nv_enc_preset_names.guid2string( enc->m_stCodecPresetGUIDArray[i], s);
+		desc_nv_enc_preset_names.guid2value( enc->m_stCodecPresetGUIDArray[i], val);
+
+		if ( val == NV_ENC_PRESET_LOSSLESS_DEFAULT ||
+			 val == NV_ENC_PRESET_LOSSLESS_HP )
+		{
+			// NVENC API 4 : lossless presets are only support in HIGH_444 profile
+			if (profileValue < NV_ENC_H264_PROFILE_HIGH_444)
+				continue; // don't include lossless profiles
+
+			// NVENC API 4 : lossless presets requires hardware capability
+			if ( nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE == 0 )
+				continue; // don't include lossless profiles
+		}
+
+		_AddConstrainedIntValuePair(ParamID_NV_ENC_PRESET)
+	}
+
+	if ( enc->m_dwCodecPresetGUIDCount == 0 ) {
+		s = "ERROR, NO SUPPORT";
+		val = 0;
+		_AddConstrainedIntValuePair(ParamID_NV_ENC_PRESET)
+	}
+	else {
+		// NVENC 4 API:
+		// Lossless PRESET is only supported in the HIGH444 profile.
+		// If HIGH profile isn't selected, downgrade preset
+		val = presetValue.value.intValue;
+		if ( (profileValue < NV_ENC_H264_PROFILE_HIGH_444) &&
+			(val == NV_ENC_PRESET_LOSSLESS_DEFAULT ||
+			 val == NV_ENC_PRESET_LOSSLESS_HP) )
+		{
+			presetValue.value.intValue = NV_ENC_PRESET_BD;
+			lRec->exportParamSuite->ChangeParam(exID, 0, ParamID_NV_ENC_PRESET, &presetValue);
+		}
+	}
+
+	const bool presetValue_is_lossless =
+		(presetValue.value.intValue == NV_ENC_PRESET_LOSSLESS_DEFAULT) ||
+		(presetValue.value.intValue == NV_ENC_PRESET_LOSSLESS_HP);
+
+	const bool presetValue_is_lowlatency =
+		(presetValue.value.intValue == NV_ENC_PRESET_LOW_LATENCY_DEFAULT ) ||
+		(presetValue.value.intValue == NV_ENC_PRESET_LOW_LATENCY_HP) ||
+		(presetValue.value.intValue == NV_ENC_PRESET_LOW_LATENCY_HQ);
 
 	////////////////////////////
 	
@@ -1533,10 +1688,49 @@ update_exportParamSuite_NVENCCfgGroup(
 
 	////////////////////////////
 
+	lRec->exportParamSuite->ClearConstrainedValues(	exID,
+		0,
+		ParamID_chromaFormatIDC);
+
+	lRec->exportParamSuite->GetParamValue(	exID,
+		0,
+		ParamID_chromaFormatIDC,
+		&exParamValue_temp);
+	{
+		// validate the chromaformat: if necessary, force it back to NV12
+
+		NV_ENC_BUFFER_FORMAT bufferfmt = static_cast<NV_ENC_BUFFER_FORMAT>(exParamValue_temp.value.intValue);
+		if ( ! IsNV12Format(bufferfmt) && ((profileValue < NV_ENC_H264_PROFILE_HIGH_444) ||
+			!nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_YUV444_ENCODE) )
+		{
+			exParamValue_temp.value.intValue = enc->m_pAvailableSurfaceFmts[0];
+			lRec->exportParamSuite->ChangeParam(	exID,
+				0,
+				ParamID_chromaFormatIDC,
+				&exParamValue_temp);
+		}
+	}
+
+	// If hardware or selected-profile doesn't support separate_color_planes,
+	//   disable the button
+	const bool disable_scp = !nv_enc_caps.value_NV_ENC_CAPS_SEPARATE_COLOUR_PLANE ||
+		(profileValue < NV_ENC_H264_PROFILE_HIGH_444);
+	_UpdateIntParam( ParamID_separateColourPlaneFlag, 0, disable_scp ? 0 : 1, 
+		disable_scp ? kPrTrue : kPrFalse,  kPrFalse
+	);
+
+	////////////////////////////
+
 
 	// Set the slider ranges, while preserving the current value
 	_UpdateIntSliderParam( ParamID_gopLength, 1, 999, kPrFalse, kPrFalse );
 	//_UpdateIntSliderParam( "idr_period", 1, 999, kPrFalse, kPrFalse ); // TODO: CNvEncoder ignores this value
+
+	// If NVENC hardware doesn't support it, disable the monoChromeEncoding
+	_UpdateIntParam( ParamID_monoChromeEncoding, 0, 1, 
+		nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_MONOCHROME ? kPrFalse :kPrTrue,
+		kPrFalse
+	);
 
 	// max_ref_frames:
 	// --------------
@@ -1554,7 +1748,8 @@ update_exportParamSuite_NVENCCfgGroup(
 	int max_ref_frames = exParamValue_temp.value.intValue;
 	
 	bool bframes_disabled = (nv_enc_caps.value_NV_ENC_CAPS_NUM_MAX_BFRAMES == 0) ||
-		(profileValue.value.intValue == NV_ENC_H264_PROFILE_BASELINE) ||
+		(profileValue == NV_ENC_H264_PROFILE_BASELINE) ||
+		presetValue_is_lossless ||
 		( max_ref_frames < 2);
 
 	_UpdateIntSliderParam( ParamID_numBFrames, 0, 
@@ -1579,7 +1774,7 @@ update_exportParamSuite_NVENCCfgGroup(
 		{
 			if ( !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_FIELD_ENCODING )
 				continue; // hardware doesn't support it, so don't add this option
-			if ( profileValue.value.intValue == NV_ENC_H264_PROFILE_BASELINE )
+			if ( profileValue == NV_ENC_H264_PROFILE_BASELINE )
 				continue; // interlaced/MBAFF not available on base-profile
 		}
 
@@ -1592,11 +1787,11 @@ update_exportParamSuite_NVENCCfgGroup(
 
 	// In BASELINE profile, disable the control (because only FRAME-mode is allowed)
 	_UpdateIntParam( ParamID_FieldEncoding, 0, MAX_POSITIVE, 
-		(profileValue.value.intValue == NV_ENC_H264_PROFILE_BASELINE) ? kPrTrue : kPrFalse,
+		(profileValue == NV_ENC_H264_PROFILE_BASELINE) ? kPrTrue : kPrFalse,
 		kPrFalse
 	);
 		////////////////////////////
-
+	
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 		0,
 		ParamID_rateControl);
@@ -1610,15 +1805,58 @@ update_exportParamSuite_NVENCCfgGroup(
 			!(nv_enc_caps.value_NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES & val) )
 			continue; // this rc-mode isn't supported, skip it
 
-		// NVENC 3.0 API kludge -- don't know how the '2_PASS' modes work, so skip them
-		if ( val >= NV_ENC_PARAMS_RC_2_PASS_QUALITY )
-			continue; // skip it
+		// NVENC 3.0 API kludge -- skip the low-latency '2_PASS' (CBR) modes
+		if ( val == NV_ENC_PARAMS_RC_2_PASS_QUALITY || val == NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP)
+			if ( !presetValue_is_lowlatency )
+				continue; // skip it
 
 		_AddConstrainedIntValuePair(ParamID_rateControl)
 	}
 	
+	// Fixup: If user selected a LOSSLESS preset, 
+	//        then force rateControl to CONSTQP.
 	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_rateControl, &exParamValue_temp);
+	if ( presetValue_is_lossless ) {
+		exParamValue_temp.value.intValue = NV_ENC_PARAMS_RC_CONSTQP;
+		lRec->exportParamSuite->ChangeParam(
+			exID, 0, ParamID_rateControl, &exParamValue_temp
+		);
+	}
+
+	_UpdateParam_dh( ParamID_rateControl,
+		presetValue_is_lossless ? kPrTrue : kPrFalse, // Lossless: don't let user change setting
+		kPrFalse
+	);
+	
 	NV_ENC_PARAMS_RC_MODE rateControl = static_cast<NV_ENC_PARAMS_RC_MODE>(exParamValue_temp.value.intValue);
+
+	////////////////////////////
+
+	// qpPrimeYZeroTransformBypassFlag - lossless encoding:
+	// -----------------------------
+	// For HIGH_PROFILE and lower (not HIGH_444), clear the box and disable this setting
+	// For HIGH_444_PROFILE:
+	//     if presetValue is LOSSLESS, then set the box and disable this setting
+	//      otherwise, enable the box (i.e. let use select the value)
+	if ( profileValue < NV_ENC_H264_PROFILE_HIGH_444 ) {
+		// selected profile is not HIGH_444_PREDICTIVE,
+		//    lossless mode is not supported here.  So disable the control
+		//    and force it to 0 (false)
+		_UpdateIntParam( ParamID_qpPrimeYZeroTransformBypassFlag, 0, 0, kPrTrue, kPrFalse ); 
+	}
+	else {
+		// selected profile is HIGH_444_PREDICTIVE
+		// lossless mode is supported.
+		// Control's e
+		if ( presetValue_is_lossless ) {
+			// Disable the control, and force it to 1 (true)
+			_UpdateIntParam( ParamID_qpPrimeYZeroTransformBypassFlag, 1, 1, kPrTrue, kPrFalse ); 
+		}
+		else {
+			// Enable the control: let user turn on/off this option
+			_UpdateIntParam( ParamID_qpPrimeYZeroTransformBypassFlag, 0, 1, kPrFalse, kPrFalse ); 
+		}
+	}
 
 	////////////////////////////
 
@@ -1644,9 +1882,13 @@ update_exportParamSuite_NVENCCfgGroup(
 	prBool qpb_hidden = ((qp_hidden == kPrFalse) && !bframes_disabled && (numBFrames>=1)) ?
 		kPrFalse : kPrTrue;
 
-	_UpdateIntSliderParam( ParamID_qpI, 1, 99, kPrFalse, qp_hidden  );
-	_UpdateIntSliderParam( ParamID_qpP, 1, 99, kPrFalse, qp_hidden );
-	_UpdateIntSliderParam( ParamID_qpB, 1, 99, kPrFalse, qpb_hidden );
+	// If user selected 'LOSSLESS' preset, then restrict qp-Sliders to 0.
+	prBool qp_disabled = presetValue_is_lossless ? kPrTrue : kPrFalse;
+	int    _qp_max     = presetValue_is_lossless ? 0 : 99;
+
+	_UpdateIntSliderParam( ParamID_qpI, 0, _qp_max, qp_disabled, qp_hidden  );
+	_UpdateIntSliderParam( ParamID_qpP, 0, _qp_max, qp_disabled, qp_hidden );
+	_UpdateIntSliderParam( ParamID_qpB, 0, _qp_max, qp_disabled, qpb_hidden );
 
 	// The MinQP parameters are *only* used in VBR_MinQP rate-control mode:
 	//    hide them if plugin is not set to VBR_MinQP.
@@ -1656,9 +1898,9 @@ update_exportParamSuite_NVENCCfgGroup(
 	prBool min_qpb_hidden = ((min_qp_hidden == kPrFalse) && !bframes_disabled && (numBFrames>=1)) ?
 		kPrFalse : kPrTrue;
 
-	_UpdateIntSliderParam( ParamID_min_qpI, 1, 99, kPrFalse, min_qp_hidden  );
-	_UpdateIntSliderParam( ParamID_min_qpP, 1, 99, kPrFalse, min_qp_hidden  );
-	_UpdateIntSliderParam( ParamID_min_qpB, 1, 99, kPrFalse, min_qpb_hidden );
+	_UpdateIntSliderParam( ParamID_min_qpI, 0, 99, kPrFalse, min_qp_hidden  );
+	_UpdateIntSliderParam( ParamID_min_qpP, 0, 99, kPrFalse, min_qp_hidden  );
+	_UpdateIntSliderParam( ParamID_min_qpB, 0, 99, kPrFalse, min_qpb_hidden );
 
 	// The MaxQP parameters are *only* used when?!?
 	//    hide them if plugin is not set to VBR_MinQP.
@@ -1685,16 +1927,16 @@ update_exportParamSuite_NVENCCfgGroup(
 	_floor_exParamValue_int( ParamID_max_qpP, ParamID_min_qpP )
 	_floor_exParamValue_int( ParamID_max_qpB, ParamID_min_qpB )
 
-	_UpdateIntSliderParam( ParamID_max_qpI, 1, 99, kPrFalse, max_qp_hidden );
-	_UpdateIntSliderParam( ParamID_max_qpP, 1, 99, kPrFalse, max_qp_hidden );
-	_UpdateIntSliderParam( ParamID_max_qpB, 1, 99, kPrFalse, max_qpb_hidden );
+	_UpdateIntSliderParam( ParamID_max_qpI, 0, 99, kPrFalse, max_qp_hidden );
+	_UpdateIntSliderParam( ParamID_max_qpP, 0, 99, kPrFalse, max_qp_hidden );
+	_UpdateIntSliderParam( ParamID_max_qpB, 0, 99, kPrFalse, max_qpb_hidden );
 
 	// The InitialQP parameters are *only* used when?!?
 	//    hide them if plugin is not set to VBR_MinQP.
 	// TODO: when are the initial-QP params used?
-	_UpdateIntSliderParam( ParamID_initial_qpI, 1, 99, kPrFalse, kPrTrue ); // TODO
-	_UpdateIntSliderParam( ParamID_initial_qpP, 1, 99, kPrFalse, kPrTrue );
-	_UpdateIntSliderParam( ParamID_initial_qpB, 1, 99, kPrFalse, kPrTrue );
+	_UpdateIntSliderParam( ParamID_initial_qpI, 0, 99, kPrFalse, kPrTrue ); // TODO
+	_UpdateIntSliderParam( ParamID_initial_qpP, 0, 99, kPrFalse, kPrTrue );
+	_UpdateIntSliderParam( ParamID_initial_qpB, 0, 99, kPrFalse, kPrTrue );
 
 	////////////////////////////
 
@@ -1715,7 +1957,7 @@ update_exportParamSuite_NVENCCfgGroup(
 
 	// FMO is only available on BASELINE profile, so disable it for all other PROFILEs
 	_UpdateIntParam( ParamID_NV_ENC_H264_FMO, 0, MAX_POSITIVE, 
-		(profileValue.value.intValue != NV_ENC_H264_PROFILE_BASELINE) ? kPrTrue : kPrFalse,
+		(profileValue != NV_ENC_H264_PROFILE_BASELINE) ? kPrTrue : kPrFalse,
 		kPrFalse
 	);
 
@@ -1766,7 +2008,7 @@ update_exportParamSuite_NVENCCfgGroup(
 		{
 			if ( !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_CABAC )
 				continue; // hardware doesn't support it, so don't add this option
-			if ( profileValue.value.intValue <= NV_ENC_H264_PROFILE_BASELINE )
+			if ( profileValue <= NV_ENC_H264_PROFILE_BASELINE )
 				continue; // base-profile doesn't support CABAC
 		}
 
@@ -1775,23 +2017,36 @@ update_exportParamSuite_NVENCCfgGroup(
 
 	////////////////////////////
 
-	lRec->exportParamSuite->ClearConstrainedValues(	exID,
-		0,
-		ParamID_chromaFormatIDC);
-
 	for(unsigned i = 0; i < enc->m_dwInputFmtCount; ++i ) {
 		bool exists = desc_nv_enc_buffer_format_names.value2string(enc->m_pAvailableSurfaceFmts[i], s);
 		if ( exists ) {
 			val = enc->m_pAvailableSurfaceFmts[i];
-			if ( val >= NV_ENC_BUFFER_FORMAT_YUV444_PL )
+			NV_ENC_BUFFER_FORMAT bufferfmt = static_cast<NV_ENC_BUFFER_FORMAT>(val);
+			if ( IsYUV444Format(bufferfmt) )
 			{
-				if ( !nv_enc_caps.value_NV_ENC_CAPS_SEPARATE_COLOUR_PLANE )
+				if ( !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_YUV444_ENCODE )
 					continue; // HiP444 requires the separate_colour_plane capability
-				if ( profileValue.value.intValue < NV_ENC_H264_PROFILE_HIGH )
-					continue; // adaptive transform (4x4/8x8) not available @ base/main profile
+
+				if ( profileValue < NV_ENC_H264_PROFILE_HIGH_444 )
+					continue; // ... and the Hi444 profile must be selected
 			}
 			_AddConstrainedIntValuePair(ParamID_chromaFormatIDC)
 		}
+	}
+
+	////////////////////////////
+	
+	lRec->exportParamSuite->GetParamValue(	exID,
+		0,
+		ParamID_chromaFormatIDC,
+		&exParamValue_temp);
+
+	{
+		// Hide the hack-button if we're not currently 
+		NV_ENC_BUFFER_FORMAT bufferfmt = static_cast<NV_ENC_BUFFER_FORMAT>(exParamValue_temp.value.intValue);
+		const bool disable_hack444 = IsYUV444Format(bufferfmt) ? false : true;
+	
+		_UpdateParam_dh(ParamID_useChroma444hack, kPrFalse, disable_hack444 ? kPrTrue : kPrFalse )
 	}
 
 	////////////////////////////
@@ -1822,7 +2077,7 @@ update_exportParamSuite_NVENCCfgGroup(
 		{
 			if ( !nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_ADAPTIVE_TRANSFORM)
 				continue; // hardware doesn't support it, so don't add this option
-			if ( profileValue.value.intValue <= NV_ENC_H264_PROFILE_MAIN )
+			if ( profileValue <= NV_ENC_H264_PROFILE_MAIN )
 				continue; // adaptive transform (4x4/8x8) not available @ base/main profile
 		}
 
@@ -1866,8 +2121,12 @@ update_exportParamSuite_NVENCCfgGroup(
 	*/
 	_UpdateIntParam( ParamID_enableVFR, 0, 1, kPrFalse, kPrFalse );
 
+	_UpdateIntParam( ParamID_enableAQ, 0, 1, kPrFalse, kPrFalse );
+
 	_UpdateIntParam( ADBEVideoWidth, 1, nv_enc_caps.value_NV_ENC_CAPS_WIDTH_MAX, kPrFalse, kPrFalse );
 	_UpdateIntParam( ADBEVideoHeight, 1, nv_enc_caps.value_NV_ENC_CAPS_HEIGHT_MAX, kPrFalse, kPrFalse );
+
+	return need_to_update_videogroup;
 }
 
 void
@@ -1893,7 +2152,7 @@ update_exportParamSuite_VideoGroup(
 	};
 	const nv_enc_caps_s * const nv_enc_caps = &(lRec->NvGPUInfo.nv_enc_caps);
 
-	exParamValues exParamValue_temp, rateControlValue;
+	exParamValues exParamValue_temp;
 	exOneParamValueRec fieldValue; 
 	prUTF16Char tempString[256];
 
@@ -1913,8 +2172,8 @@ update_exportParamSuite_VideoGroup(
 	}
 
 
-	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_rateControl, &rateControlValue);
-	NV_ENC_PARAMS_RC_MODE rateControl = static_cast<NV_ENC_PARAMS_RC_MODE>(rateControlValue.value.intValue);
+	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_rateControl, &exParamValue_temp);
+	NV_ENC_PARAMS_RC_MODE rateControl = static_cast<NV_ENC_PARAMS_RC_MODE>(exParamValue_temp.value.intValue);
 
 	// Target/Average bitrate is used for all rate-control modes except ConstantQP
 	prBool tgtbitrate_hidden = (rateControl == NV_ENC_PARAMS_RC_CONSTQP) ?
@@ -1923,7 +2182,8 @@ update_exportParamSuite_VideoGroup(
 	// Max bitrate is used for all rate-control modes except Constant bitrate and Constant-QP
 	prBool maxbitrate_hidden = (rateControl == NV_ENC_PARAMS_RC_CONSTQP || 
 		rateControl == NV_ENC_PARAMS_RC_CBR || 
-		rateControl == NV_ENC_PARAMS_RC_CBR2) ?
+		rateControl == NV_ENC_PARAMS_RC_2_PASS_QUALITY ||         // low-latency CBR
+		rateControl == NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP ) ?  // low-latency CBR
 		kPrTrue : kPrFalse;
 	//
 	// Set the slider ranges, while preserving the current value
@@ -1959,25 +2219,32 @@ update_exportParamSuite_VideoGroup(
 	_UpdateFloatSliderParam( ADBEVideoTargetBitrate, 1, max_bitrate, kPrFalse, tgtbitrate_hidden );
 
 	//_UpdateIntParam( "autoselect_PrPixelFormat", 0, MAX_POSITIVE, kPrFalse, kPrFalse )
+
+	lRec->exportParamSuite->GetParamValue(exID, mgroupIndex, ParamID_chromaFormatIDC, &exParamValue_temp);
+	const NV_ENC_BUFFER_FORMAT chromaFormatIDC = static_cast<NV_ENC_BUFFER_FORMAT>(
+		exParamValue_temp.value.intValue
+	); // get the user-setting for framebuffer color-format
+
 	lRec->exportParamSuite->ClearConstrainedValues(	exID,
 													mgroupIndex,
 													ParamID_forced_PrPixelFormat);
 	for (unsigned i = 0; i < desc_PrPixelFormat.Size(); i++)
 	{
-		const bool user_420 = IsNV12Format( lRec->NvEncodeConfig.chromaFormatIDC) ||
-			IsYV12Format( lRec->NvEncodeConfig.chromaFormatIDC);
+		const bool user_420 = IsNV12Format( chromaFormatIDC) || IsYV12Format( chromaFormatIDC);
+		const bool user_444 = IsYUV444Format( chromaFormatIDC);
 
 		int pp; // tempvar
 		val = i;
 		desc_PrPixelFormat.index2string(i, s);
 		desc_PrPixelFormat.index2value(i, pp);
 
-		// If user has chosen YUV444, then don't list YUV420 pixelFormats
-		if ( (!user_420 ) && PrPixelFormat_is_YUV420( static_cast<PrPixelFormat>(pp) ) )
+		// If user has chosen YUV444, then only list YUV444 pixelFormats
+		if ( user_444 && !PrPixelFormat_is_YUV444( static_cast<PrPixelFormat>(pp) ) )
 			continue;
 
-		// If user has chosen YUV420, then don't list YUV444 pixelFormats
-		if ( user_420 && (!PrPixelFormat_is_YUV420( static_cast<PrPixelFormat>(pp) )) )
+		// If user has chosen YUV420, then only list YUV420 and YUV422 pixelFormats
+		if ( user_420 && !(PrPixelFormat_is_YUV420( static_cast<PrPixelFormat>(pp)) ||
+			PrPixelFormat_is_YUV422( static_cast<PrPixelFormat>(pp))) )
 			continue;
 		_AddConstrainedIntValuePair(ParamID_forced_PrPixelFormat)
 	}
@@ -2112,6 +2379,52 @@ update_exportParamSuite_BasicAudioGroup(
 
 	_UpdateIntSliderParam(ADBEAudioBitrate, new_min, new_max, kPrFalse, aac_hidden );
 }
+
+/*
+void
+update_exportParamSuite_NVENCCfgGroup_ratecontrol_names(
+	const nv_enc_caps_s nv_enc_caps,
+	const csSDK_uint32 exID,
+	ExportSettings *lRec
+)
+{
+	int						val;// temporary var (for macro-use)
+	exOneParamValueRec		vr; // temporary var (for macro-use)
+	string					s; // temporary var  (for macro-use)
+
+	exParamValues           paramValue;
+
+	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_NV_ENC_PRESET, &paramValue);
+
+	bool preset_is_lossless =   // did user select a lossless preset?
+		(paramValue.value.intValue == NV_ENC_PRESET_LOSSLESS_DEFAULT) ||
+		(paramValue.value.intValue == NV_ENC_PRESET_LOSSLESS_HP);
+
+	lRec->exportParamSuite->ClearConstrainedValues(	exID,
+		0,
+		ParamID_rateControl);
+
+	for(unsigned i = 0; i < desc_nv_enc_ratecontrol_names.Size(); ++i ) {
+		desc_nv_enc_ratecontrol_names.index2string(i, s);
+		desc_nv_enc_ratecontrol_names.index2value(i, val);
+
+		// NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES is a bitmask of supported
+		// rate-control modes.  Check if hardware supports this mode
+		if ( (val != NV_ENC_PARAMS_RC_CONSTQP) && // constqp is *ALWAYS* supported
+			!(nv_enc_caps.value_NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES & val) )
+			continue; // this rc-mode isn't supported, skip it
+
+		// NVENC 3.0 API kludge -- skip the low-latency '2_PASS' (CBR) modes
+		if ( val == NV_ENC_PARAMS_RC_2_PASS_QUALITY || val == NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP)
+			continue; // skip it
+
+		// NVENC 4.0 API kludge -- the 'LOSSLESS' presets only support ConstQP (TODO)
+		if ( preset_is_lossless && (val != NV_ENC_PARAMS_RC_CONSTQP))
+			//continue; // skip it
+
+		_AddConstrainedIntValuePair(ParamID_rateControl)
+	}
+}*/
 
 const wchar_t * const	frameRateStrings[]	= {
 	L"10",
@@ -2268,8 +2581,10 @@ select which GPU to use");
 		L"VRAM (MB)",		L"GPU onboard video-RAM (2048 or more recommended)");
 	NVENC_SetParamName(lRec, exID, ParamID_GPUSelect_Report_CCAP,
 		L"Compute Level",	L"CUDA device Compute Capability (NVENC requires 3.0 or higher)");
-	NVENC_SetParamName(lRec, exID, ParamID_GPUSelect_Report_DV,
+	NVENC_SetParamName(lRec, exID, ParamID_GPUSelect_Report_CV,
 		L"CUDA API Ver",	L"NVidia CUDA API Version (requires 5050 or higher)");
+	NVENC_SetParamName(lRec, exID, ParamID_GPUSelect_Report_DV,
+		L"GPU Driver Ver",	L"NVidia driver Version (requires 340.52 or higher)");
 	NVENC_SetParamName(lRec, exID, ParamID_NVENC_Info_Button,
 		L"NVENC Info",		L"Click <NVENC Info> to print reported capabilities" );
 
@@ -2300,8 +2615,14 @@ this is the maximum allowed bitrate (higher# = better quality)");
 		L"Target Bitrate [Mbps]", L"For Constant bitrate (CBR) and Variable bitrate (VBR) rateControls,\n\
 this is the target[/average] bitrate (higher# = better quality)");
 	NVENC_SetParamName(lRec, exID, ParamID_forced_PrPixelFormat, 
-		LParamID_forced_PrPixelFormat, L"If checkbox is enabled, NVENC forces Adobe\n\
-to use the user-selected colorimetry (Bt601 or Bt709)");
+		LParamID_forced_PrPixelFormat, L"NVENC forces Adobe app to use the\n\
+to render video in the selected pixelformat (Bt601 or Bt709)\n\
+YUV420_709  (4:2:0 Bt709)\n\
+YUV420_601  (4:2:0 Bt601)\n\
+YUYV422_601 (4:2:2 Bt601)\n\
+YUYV422_709 (4:2:2 Bt709)\n\
+VUYA_709    (4:4:4 Bt709)\n\
+");
 
 	////////////
 	//
@@ -2359,24 +2680,45 @@ to use the user-selected colorimetry (Bt601 or Bt709)");
 		LParamID_NV_ENC_CODEC, L"Selects the compression standard that will NVENC will use to encode the video"  );
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_PRESET, 
 		LParamID_NV_ENC_PRESET, L"Selects a group of internal default settings based on desired application:\n\
-CLOUD = low-latency realtime streaming\n\
-HP = high-performance (faster encode speed, lower quality)\n\
-HQ = high-quality (slower encode speed, higher quality)\n\
-BD = Bluray-disc compliant parameters\n\
-");
+(2) HP = high-performance (faster encode speed, lower quality)\n\
+(3) HQ = high-quality (slower encode speed, higher quality)\n\
+(4) BD = Bluray-disc compliant parameters\n\
+LOW_LATENCY_* = low-latency realtime streaming (no b-frames allowed)\n\
+(5)    ... LOW_LATENCY_HQ = higher-quality output, slower\n\
+(6)    ... LOW_LATENCY_HP = faster encode time\n\
+(8) LOSSLESS = mathematically lossless encoding\n\
+(9) LOSSLESS_HP = faster lossless encoding (bigger files?)\n\
+(LOSSLESS_*: Requires PROFILE_HIGH_444 or above)");
+
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_H264_PROFILE, 
 		LParamID_NV_ENC_H264_PROFILE, L"Compression Profile:\n\
-Base = simplest (no B-frames, CAVLC only)\n\
-Main = medium (allows interlacd, CABAC, B-frames)\n\
-High = most complex (adds adaptive-transform)" );
+(66)  BASE = simplest (CAVLC only, no B-frames)\n\
+(67)  MAIN = more complex (interlacing, CABAC, B-frames)\n\
+(100) HIGH = more complex (adds adaptive-transform)\n\
+    ... most applications use HIGH profile (Bluray, web, TV, etc.)\n\
+(128) STEREO = adds stereoscopic (MVC) multi view coding to HIGH\n\
+(244) HIGH_444 = most complex (lossless, 4:4:4, separateColourPlaneFlag)\n\
+" );
+
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_LEVEL_H264,
 		LParamID_NV_ENC_LEVEL_H264, L"Compression Level:\n\
 3.0 = 720x576 up to 25fps (or 720x480 @ 30fps)\n\
 3.1 = 1280x720, up to 30fps\n\
-4.0 = 1920x1080, up to 30fps\n\
-4.1 = Bluray\n\
+4.0 = 1920x1080, up to 30fps (up to 20Mbps)\n\
+4.1 = 1920x1080, up to 30fps (up to 50Mbps)\n\
 4.2 = 1920x1080, up to 60fps\n\
 5.1 = 3840x2160, up to 30fps");
+
+	NVENC_SetParamName(lRec, exID, ParamID_chromaFormatIDC, 
+		LParamID_chromaFormatIDC, L"Pixel format\n\
+FORMAT_NV12   = 4:2:0, chroma-subsampling 1/2 horizontal, 1/2 vertical\n\
+FORMAT_YUV444 = 4:4:4, no subsampling (full chroma resolution)\n\
+(4:4:4 Requires PROFILE_HIGH_444 or above)");
+
+	NVENC_SetParamName(lRec, exID, ParamID_useChroma444hack, 
+		LParamID_useChroma444hack, L"(For 4:4:4 encoding only) use 'trick' on NVENC API\n\
+Request NVENC API to use NV_ENC_BUFFER_FORMAT_NV12_TILED64x16,\n\
+instead of NV_ENC_BUFFER_FORMAT_YUV444_PL.");
 
 	//Add_NVENC_Param_bool( GroupID_NVENCCfg, "stereo3dMode", false )
 	//Add_NVENC_Param_bool( GroupID_NVENCCfg, "stereo3dEnable", false )
@@ -2387,6 +2729,10 @@ High = most complex (adds adaptive-transform)" );
 for 'infinite GOP, set to '999',\n\
 for Bluray video this value must be less than the #frames per second (23)" );
 	//NVENC_SetParamName(lRec, exID, "idr_period", L"idr_period", L"I-frame don't reuse period (#frames)" );// TODO: CNvEncoder ignores this value
+
+	NVENC_SetParamName(lRec, exID, ParamID_monoChromeEncoding, 
+		LParamID_monoChromeEncoding, L"monoChromeEncoding\n\
+force black&white encoding (ignore chroma data)" );
 
 	NVENC_SetParamName(lRec, exID, ParamID_max_ref_frames, 
 		LParamID_max_ref_frames, L"Number of reference frames\n\
@@ -2404,11 +2750,21 @@ for Bluray video this value must be less than the #frames per second (23)" );
 
 	NVENC_SetParamName(lRec, exID, ParamID_rateControl, 
 		LParamID_rateControl, L"Bitrate Control mode\n\
-VBR = variable bitrate\n\
-CBR = constant bitrate\n\
-TWOPASSCBR = CBR with localized 2-passes (very slow)\n\
-CONSTQP = constant Quantization-P\n\
-VBR_MINQP = variable bitrate with MinQP");
+(0)  CONSTQP = constant Quantization-P\n\
+(1)  VBR     = variable bitrate\n\
+(2)  CBR     = constant bitrate\n\
+(4)  VBR_MINQP = variable bitrate with Minimum Quantization-P\n\
+(8)  2_PASS_QUALITY = low-latency CBR with localized 2-passes\n\
+     (higher-quality than CBR, slow)\n\
+(16) 2_PASS_FRAMESIZE_CAP = low-latency CBR with localized 2-passes (...)\n\
+(32) 2_PASS_VBR = variable bitrate with localized 2-passes\n\
+     (higher-quality than VBR, slow)\n");
+
+	NVENC_SetParamName(lRec, exID, ParamID_qpPrimeYZeroTransformBypassFlag, 
+		LParamID_qpPrimeYZeroTransformBypassFlag, L"enable mathematically lossless encoding\n\
+(Requires rate-control ConstQP, and qpI/P/B set to 0/0/0)\n\
+(Requires PROFILE_HIGH_444 or above)\
+" );
 
 	NVENC_SetParamName(lRec, exID, ParamID_vbvBufferSize, 
 		LParamID_vbvBufferSize, L"Video Buffer Size VBV(HRD) in bits (0=auto)");
@@ -2469,14 +2825,13 @@ lower# = better quality (larger file)");
 	NVENC_SetParamName(lRec, exID, ParamID_vle_entropy_mode, 
 		LParamID_vle_entropy_mode, L"Entropy mode\n\
 CAVLC=less complex\n\
-CABAC=more complex (not allowed in baseline profile\n\
-");
+CABAC=more compression efficiency (usually)\n\
+(CABAC: Requires PROFILE_MAIN or above)");
 
-	NVENC_SetParamName(lRec, exID, ParamID_chromaFormatIDC, 
-		LParamID_chromaFormatIDC, L"Pixel format\n\
-4:2:0 = chroma-subsampling 1/2 horizontal, 1/2 vertical\n\
-4:4:4 = no chroma-subsampling (full resolution chroma)\n\
-(Bluray requires 4:2:0)");
+	NVENC_SetParamName(lRec, exID, ParamID_separateColourPlaneFlag, 
+		LParamID_separateColourPlaneFlag, L"Frames are encoded as 3 separate \n\
+planes (Y,U,V), instead of a single one\n\
+(Requires PROFILE_HIGH_444 or above)" );
 
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_MV_PRECISION, 
 		LParamID_NV_ENC_MV_PRECISION, L"Motion vector precision\n\
@@ -2486,8 +2841,9 @@ quarter pixel = most accurate, default" );
 	NVENC_SetParamName(lRec, exID, ParamID_disable_deblocking, 
 		LParamID_disable_deblocking, L"Do not use H264 deblocking filter" );
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM, 
-		LParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM, L"adaptive transform control (high-profile only)\n\
-enables dynamic macroblock sizing of 4x4 or 8x8" );
+		LParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM, L"adaptive transform control\n\
+enables dynamic macroblock sizing of 4x4 or 8x8\n\
+(Requires PROFILE_HIGH or above)" );
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_H264_BDIRECT_MODE, 
 		LParamID_NV_ENC_H264_BDIRECT_MODE, L"B-frame encoding optimization" );
 
@@ -2495,12 +2851,19 @@ enables dynamic macroblock sizing of 4x4 or 8x8" );
 		LParamID_syncMode, L"NVENC front-end interface\n\
 checkbox enabled = asynchronous mode (execute in background thread)\n\
 checkbox disabled= synchronous mode (execute in caller thread)\n\
+(nvenc_export always runs in asynchronous mode)\
 " );
 
 	NVENC_SetParamName(lRec, exID, ParamID_enableVFR, 
 		LParamID_enableVFR, L"enable variable frame rate\n\
 (allows NVENC to dynamically alter encoded frame-rate)\n\
 " );
+
+	NVENC_SetParamName(lRec, exID, ParamID_enableAQ, 
+		LParamID_enableAQ, L"enable adaptive quantization\n\
+(enables adaptive quantization with 'QP' rate-control modes)\n\
+" );
+
 	//
 	// Multiplexer group
 	//
@@ -3103,7 +3466,7 @@ exSDKValidateParamChanged (
 	prMALError				result			= malNoError;
 	csSDK_uint32			exID			= validateParamChangedRecP->exporterPluginID;
 	ExportSettings			*lRec			= reinterpret_cast<ExportSettings*>(validateParamChangedRecP->privateData);
-	exParamValues			changedValue;
+	exParamValues			changedValue, exParamValue_temp;
 
 	if (!lRec->exportParamSuite)
 		return exportReturn_ErrMemory;
@@ -3174,8 +3537,29 @@ exSDKValidateParamChanged (
 		(strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_H264_PROFILE) == 0) ||
 		(strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_LEVEL_H264) == 0) )
 	{
+		// Parameter value fixup: 
+		//   If PROFILE was downgraded, then also downgrade the preset if it is lossless.
+		if ( strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_NV_ENC_H264_PROFILE) == 0) {
+			lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_NV_ENC_PRESET, &exParamValue_temp);
+			int preset = exParamValue_temp.value.intValue; // preset
+			if ( (changedValue.value.intValue < NV_ENC_H264_PROFILE_HIGH_444) &&
+				(preset == NV_ENC_PRESET_LOSSLESS_DEFAULT ||
+				preset == NV_ENC_PRESET_LOSSLESS_HP) )
+			{
+				// downgrade the lossless-reset to BluRay preset.
+				exParamValue_temp.value.intValue = NV_ENC_PRESET_BD;
+				lRec->exportParamSuite->ChangeParam(exID, 0, ParamID_NV_ENC_PRESET, &exParamValue_temp);
+			}
+		}
+
 		update_exportParamSuite_NVENCCfgGroup( exID, lRec );
 		update_exportParamSuite_VideoGroup( exID, lRec );
+	}
+	else if (strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_chromaFormatIDC) == 0) {
+		// update the useChroma444hack button
+		update_exportParamSuite_NVENCCfgGroup( exID, lRec );
+		// update the allowed formats in forced_PrPixelFormat box (VideoGroup)
+		update_exportParamSuite_VideoGroup(exID, lRec);
 	}
 	else if ((strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_rateControl) == 0) ||
 		(strcmp(validateParamChangedRecP->changedParamIdentifier, ParamID_numBFrames) == 0) ||
@@ -3467,10 +3851,14 @@ NVENC_ExportSettings_to_EncodeConfig(
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_H264_PROFILE, intValue, profile, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_H264_PROFILE, intValue, application, unsigned int ); // ?
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_LEVEL_H264, intValue, level, unsigned int );
+
+	_AdobeParamToEncodeConfig( ParamID_chromaFormatIDC, intValue, chromaFormatIDC, NV_ENC_BUFFER_FORMAT );
+	_AdobeParamToEncodeConfig( ParamID_useChroma444hack, intValue, useChroma444hack, unsigned int);
 	_AdobeParamToEncodeConfig( ParamID_gopLength, intValue, gopLength, unsigned int );
 	if ( config->gopLength >= 999 )
 		config->gopLength = 0xFFFFFFFFUL; // force to infinite
 
+	_AdobeParamToEncodeConfig( ParamID_monoChromeEncoding, intValue, monoChromeEncoding, unsigned int );
 	//_AdobeParamToEncodeConfig( "idr_period", intValue, idr_period, unsigned int );// TODO: CNvEncoder ignores this value
 	config->idr_period = config->gopLength;
 	_AdobeParamToEncodeConfig( ParamID_max_ref_frames, intValue, max_ref_frames, unsigned int );
@@ -3479,6 +3867,7 @@ NVENC_ExportSettings_to_EncodeConfig(
 
 	// the ConstQP parameters are only used in ConstQP rate-control mode
 	_AdobeParamToEncodeConfig( ParamID_rateControl, intValue, rateControl, unsigned int );
+	_AdobeParamToEncodeConfig( ParamID_qpPrimeYZeroTransformBypassFlag, intValue, qpPrimeYZeroTransformBypassFlag, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_vbvBufferSize, intValue, vbvBufferSize, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_vbvInitialDelay, intValue, vbvInitialDelay, unsigned int );
 
@@ -3511,7 +3900,7 @@ NVENC_ExportSettings_to_EncodeConfig(
 	_AdobeParamToEncodeConfig( ParamID_numSlices, intValue, numSlices, int );
 	_AdobeParamToEncodeConfig( ParamID_vle_entropy_mode, intValue, vle_entropy_mode, NV_ENC_H264_ENTROPY_CODING_MODE );
 
-	_AdobeParamToEncodeConfig( ParamID_chromaFormatIDC, intValue, chromaFormatIDC, NV_ENC_BUFFER_FORMAT );
+	_AdobeParamToEncodeConfig( ParamID_separateColourPlaneFlag, intValue, separateColourPlaneFlag, unsigned int );
 
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_MV_PRECISION, intValue, mvPrecision, NV_ENC_MV_PRECISION );
 	_AdobeParamToEncodeConfig( ParamID_disable_deblocking, intValue, disable_deblocking, unsigned int );
@@ -3520,6 +3909,7 @@ NVENC_ExportSettings_to_EncodeConfig(
 
 	_AdobeParamToEncodeConfig( ParamID_syncMode, intValue, syncMode, int );
 	_AdobeParamToEncodeConfig( ParamID_enableVFR, intValue, enableVFR, unsigned int );
+	_AdobeParamToEncodeConfig( ParamID_enableAQ, intValue, enableAQ, unsigned int );
 
 	_AdobeParamToEncodeConfig( ADBEVideoWidth, intValue, width, unsigned int );
 	_AdobeParamToEncodeConfig( ADBEVideoHeight, intValue, height, unsigned int );
@@ -3576,12 +3966,6 @@ NVENC_ExportSettings_to_EncodeConfig(
 		false;
 	desc_PrPixelFormat.index2value( paramValue.value.intValue, requested_PixelFormat0 );
 	lRec->requested_PixelFormat0 = static_cast<PrPixelFormat>(requested_PixelFormat0);
-
-	// not supported
-	// -------------
-	// CNvEncoderH264 only works with 4:2:0 chroma mode so far (use NV12_PL)
-	config->separate_color_plane = ( config->chromaFormatIDC >= NV_ENC_BUFFER_FORMAT_YUV444_PL ) ?
-		1 : 0;
 
 	return S_OK;
 }

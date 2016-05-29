@@ -38,10 +38,12 @@
 #include <include/helper_timer.h>       // helper functions for timing
 #include <include/nvFileIO.h>           // helper functions for large file access
 #include <cstdio> // getchar
+#include <include/videoFormats.h>  // IsYV12, IsNV12
+
 
 #pragma warning (disable:4189)
 
-#define FRAME_QUEUE 240     // Maximum of 240 frames that we will use as an array to buffering frames
+#define FRAME_QUEUE 60     // Maximum of 60 frames that we will use as an array to buffering frames
 
 const char *sAppName = "nvEncoder";
 
@@ -80,6 +82,7 @@ void queryAllEncoderCaps(CNvEncoder *pEncoder, string &s)
 {
 	ostringstream os;
 	string        stemp;
+	nv_enc_caps_s caps;
 	char tmp[256];
 	int result;
 	os << "queryAlllEncoderCaps( deviceID=" << std::dec << pEncoder->m_deviceID << " )\n";
@@ -93,42 +96,46 @@ void queryAllEncoderCaps(CNvEncoder *pEncoder, string &s)
 	os << stemp;
 	os << endl;
 
-#define QUERY_PRINT_CAPS(pEnc, CAPS) pEnc->QueryEncodeCaps(CAPS, &result); sprintf(tmp, "Query %s = %d\n", #CAPS, result); os << tmp
+#define QUERY_PRINT_CAPS(CAP) sprintf(tmp, "Query %s = %d\n", #CAP, caps.value_ ## CAP); os << tmp
 	
     if (pEncoder) 
     {
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_NUM_MAX_BFRAMES);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_FIELD_ENCODING);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_MONOCHROME);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_FMO);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_QPELMV);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_BDIRECT_MODE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_CABAC);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_ADAPTIVE_TRANSFORM);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_STEREO_MVC);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_NUM_MAX_TEMPORAL_LAYERS);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_HIERARCHICAL_PFRAMES);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_HIERARCHICAL_BFRAMES);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_LEVEL_MAX);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_LEVEL_MIN);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SEPARATE_COLOUR_PLANE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_WIDTH_MAX);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_HEIGHT_MAX);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_TEMPORAL_SVC);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_DYN_RES_CHANGE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_DYN_BITRATE_CHANGE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_DYN_FORCE_CONSTQP);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_DYN_RCMODE_CHANGE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_SUBFRAME_READBACK);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_CONSTRAINED_ENCODING);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_INTRA_REFRESH);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_DYNAMIC_SLICE_MODE);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_PREPROC_SUPPORT);
-        QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
-		//QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_MB_NUM_MAX); // error in driver 320.79
+        pEncoder->QueryEncoderCaps( caps );
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_NUM_MAX_BFRAMES);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_FIELD_ENCODING);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_MONOCHROME);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_FMO);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_QPELMV);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_BDIRECT_MODE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_CABAC);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_ADAPTIVE_TRANSFORM);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_STEREO_MVC);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_NUM_MAX_TEMPORAL_LAYERS);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_HIERARCHICAL_PFRAMES);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_HIERARCHICAL_BFRAMES);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_LEVEL_MAX);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_LEVEL_MIN);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SEPARATE_COLOUR_PLANE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_WIDTH_MAX);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_HEIGHT_MAX);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_TEMPORAL_SVC);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_DYN_RES_CHANGE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_DYN_BITRATE_CHANGE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_DYN_FORCE_CONSTQP);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_DYN_RCMODE_CHANGE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_SUBFRAME_READBACK);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_CONSTRAINED_ENCODING);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_INTRA_REFRESH);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_DYNAMIC_SLICE_MODE);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_PREPROC_SUPPORT);
+        QUERY_PRINT_CAPS(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_MB_NUM_MAX);     // still fails with Geforce 340.52 driver
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_MB_PER_SEC_MAX );// still fails with Geforce 340.52 driver
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_YUV444_ENCODE );
+		QUERY_PRINT_CAPS(NV_ENC_CAPS_SUPPORT_LOSSLESS_ENCODE );
     }
 
 	s = os.str();
@@ -240,12 +247,39 @@ int main(const int argc, char *argv[])
     nvEncoderConfig[0].frameRateDen = inCuvideoformat[0].frame_rate.denominator;
     nvEncoderConfig[0].frameRateNum = inCuvideoformat[0].frame_rate.numerator;
     nvEncoderConfig[0].FieldEncoding = inCuvideoformat[0].progressive_sequence ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME : NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD;
-    //nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_PL;
-	nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_TILED64x16;
 
     // Parse the command line parameters for the application and NVENC
+	// This step allows some of the above settings (like aspect ratio) to be overriden from the command-line
 	pprintf("calling parseCmdLineArguments()\n");
     parseCmdLineArguments(argc, (const char **)argv, &nvAppEncoderParams, &nvEncoderConfig[0]);
+
+	// Kludge: override certain settings based on the input-file:
+	switch( inCuvideoformat[0].chroma_format ) {
+	case cudaVideoChromaFormat_Monochrome: // 4:2:0 (any of the following: base/main/high/high422/high444/high444p)
+	case cudaVideoChromaFormat_420:  // 4:2:0 (any of the following: base/main/high/high422/high444/high444p)
+		// don't override the default-value set by utilities.cpp
+		//nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_NV12_TILED64x16;// 4:2:0
+		break;
+
+	case cudaVideoChromaFormat_422:  // 4:2:2 (High422/High444/High444p)
+		pprintf("input-videofile: ERROR, chroma_format cudaVideoChromaFormat_422 is not supported!\n");
+		exit(EXIT_FAILURE);
+		break;
+
+	case cudaVideoChromaFormat_444:  // 4:4:4 (High444/High444p)
+		nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16;// 4:4:4
+		if ( nvEncoderConfig[0].profile < NV_ENC_H264_PROFILE_HIGH_444 ) {
+			pprintf("FIXUP: forcing nvEncoderConfig[0].profile = NV_ENC_H264_PROFILE_HIGH_444\n");
+			nvEncoderConfig[0].profile = NV_ENC_H264_PROFILE_HIGH_444;
+		}
+		break;
+	default:
+		pprintf("input-videofile: ERROR, unknown chroma_format: %0u!\n", inCuvideoformat[0].chroma_format);
+		exit(EXIT_FAILURE);
+	} // switch( inCuvideoformat[0].chroma_format ) 
+
+	// temp kludge
+	//nvEncoderConfig[0].chromaFormatIDC = NV_ENC_BUFFER_FORMAT_YUV444_TILED64x16;// 4:4:4
 
     // Show a summary of all the parameters for GPU 0
 	pprintf("calling displayEncodingParams()\n");
@@ -441,19 +475,38 @@ int main(const int argc, char *argv[])
 		pVideoDecode[encoderID]->Start();
     } // for ( encoderID
 
-	printf("Checkpoint 1\n");
+	printf("Checkpoint 4\n");
         
-    unsigned int picHeight = (nvEncoderConfig[0].FieldEncoding == NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME) ?
-                             nvEncoderConfig[0].height : (nvEncoderConfig[0].height >> 1);
-    int lumaPlaneSize      = (nvEncoderConfig[0].width * nvEncoderConfig[0].height);
-    int chromaPlaneSize    = (nvEncoderConfig[0].chromaFormatIDC == NV_ENC_BUFFER_FORMAT_NV12_TILED64x16) ?
-                             lumaPlaneSize :
-                             ((nvEncoderConfig[0].width * nvEncoderConfig[0].height) >> 2);
+    unsigned int picHeight ;
+    int lumaPlaneSize      ;
+    int chromaPlaneSize    ;
+
+	//
+	// Create picture buffers for the encoder
+	//
+    picHeight     = (nvEncoderConfig[0].FieldEncoding == NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME) ?
+                   nvEncoderConfig[0].height : (nvEncoderConfig[0].height >> 1);
+    lumaPlaneSize = (nvEncoderConfig[0].width * nvEncoderConfig[0].height);
+
+	if ( IsYUV444Format( nvEncoderConfig[0].chromaFormatIDC ) )
+		chromaPlaneSize = lumaPlaneSize;// separate U,V planes: each is full size
+	else if ( IsNV12Format( nvEncoderConfig[0].chromaFormatIDC) )
+		chromaPlaneSize = lumaPlaneSize >> 1;// combined U,V plane: 1/4 + 1/4 = 1/2 size...
+	else if ( IsYV12Format( nvEncoderConfig[0].chromaFormatIDC) ) // separate U, V planes: each is 1/4 size
+		chromaPlaneSize = lumaPlaneSize >> 2;
 
     yuv[0] = new unsigned char[FRAME_QUEUE * lumaPlaneSize  ];
     yuv[1] = new unsigned char[FRAME_QUEUE * chromaPlaneSize];
     yuv[2] = new unsigned char[FRAME_QUEUE * chromaPlaneSize];
 
+	// clear the buffers before starting (wow, takes way too long)
+	/*
+	for(int i = 0; i < FRAME_QUEUE; ++i ) {
+		memset( yuv[0], 0  , FRAME_QUEUE * lumaPlaneSize );
+		memset( yuv[1], 128, FRAME_QUEUE * chromaPlaneSize );
+		memset( yuv[2], 128, FRAME_QUEUE * chromaPlaneSize );
+	}
+	*/
     fprintf(stderr, "\n ** Start Encode <%s> ** \n", nvAppEncoderParams.input_file);
     
     int viewId = 0;
@@ -585,13 +638,34 @@ int main(const int argc, char *argv[])
 				bTopField = oDecodedDispInfo.top_field_first ? true : false;
 
 			if ( not_end_of_source && got_source_frame ) {
-                stEncodeFrame.yuv[0] = &yuv[0][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height];
-                stEncodeFrame.yuv[1] = &yuv[1][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height/4];
-                stEncodeFrame.yuv[2] = &yuv[2][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height/4];
-
+                // [0] = luma
+				stEncodeFrame.yuv[0] = &yuv[0][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height];
                 stEncodeFrame.stride[0] = nvEncoderConfig[encoderID].width;
-                stEncodeFrame.stride[1] = nvEncoderConfig[encoderID].width/2;
-                stEncodeFrame.stride[2] = nvEncoderConfig[encoderID].width/2;
+
+                // [1] = chroma U
+                // [2] = chroma V
+				if ( IsYUV444Format( nvEncoderConfig[0].chromaFormatIDC ) ) {
+					// YUV444: Each chroma plane is same size as luma plane
+	                stEncodeFrame.yuv[1] = &yuv[1][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height];
+					stEncodeFrame.yuv[2] = &yuv[2][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height];
+	                stEncodeFrame.stride[1] = nvEncoderConfig[encoderID].width;
+					stEncodeFrame.stride[2] = nvEncoderConfig[encoderID].width;
+				}
+				else if ( IsNV12Format( nvEncoderConfig[0].chromaFormatIDC ) ) {
+					// NV12: One chroma plane
+	                stEncodeFrame.yuv[1] = &yuv[1][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height/4];
+					stEncodeFrame.yuv[2] = &yuv[2][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height/4];
+	                stEncodeFrame.stride[1] = nvEncoderConfig[encoderID].width/2;
+					stEncodeFrame.stride[2] = nvEncoderConfig[encoderID].width/2;
+				}
+				else {
+					// YUV420: Each chroma plane is 1/4 size of luma plane
+	                stEncodeFrame.yuv[1] = &yuv[1][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height/4];
+					stEncodeFrame.yuv[2] = &yuv[2][(frameCount % FRAME_QUEUE)*nvEncoderConfig[encoderID].width*nvEncoderConfig[encoderID].height/4];
+	                stEncodeFrame.stride[1] = nvEncoderConfig[encoderID].width/2;
+					stEncodeFrame.stride[2] = nvEncoderConfig[encoderID].width/2;
+				}
+
                 if (nvAppEncoderParams.mvc == 1)
                 {
                     stEncodeFrame.viewId = viewId;
@@ -640,8 +714,18 @@ int main(const int argc, char *argv[])
 				}
 
                 stEncodeFrame.yuv[0] = &yuv[0][ fbbase ];
-                stEncodeFrame.yuv[1] = &yuv[1][ fbbase >> 2];
-                stEncodeFrame.yuv[2] = &yuv[2][ fbbase >> 2];
+				if ( IsYUV444Format( nvEncoderConfig[0].chromaFormatIDC ) ) {
+					stEncodeFrame.yuv[1] = &yuv[1][ fbbase ];
+					stEncodeFrame.yuv[2] = &yuv[2][ fbbase ];
+				}
+				else if ( IsNV12Format( nvEncoderConfig[0].chromaFormatIDC ) ) {
+					stEncodeFrame.yuv[1] = &yuv[1][ fbbase >> 2];
+					stEncodeFrame.yuv[2] = &yuv[2][ fbbase >> 2];
+				}
+				else {
+					stEncodeFrame.yuv[1] = &yuv[1][ fbbase >> 2];
+					stEncodeFrame.yuv[2] = &yuv[2][ fbbase >> 2];
+				}
 
                 //pEncoder[encoderID]->EncodeFrame(&stEncodeFrame, false);
                 pEncoder[encoderID]->EncodeCudaMemFrame(&stEncodeFrame,oDecodedFrame,false);
@@ -692,11 +776,11 @@ int main(const int argc, char *argv[])
 		else
 			numFramesToEncode = nvAppEncoderParams.numFramesToEncode;
 
-        printf("** EncoderID[%d] - Summary of Results **\n", encoderID);
-        printf("  Frames Encoded     : %d\n", numFramesToEncode);
-        printf("  Total Encode Time  : %6.2f (sec)\n", total_encode_time[encoderID] / 1000.0f );
-        printf("  Average Time/Frame : %6.2f (ms)\n",  total_encode_time[encoderID] / numFramesToEncode );
-        printf("  Average Frame Rate : %4.2f (fps)\n", numFramesToEncode * 1000.0f / total_encode_time[encoderID]);
+        pprintf("** EncoderID[%d] - Summary of Results **\n", encoderID);
+        pprintf("  Frames Encoded     : %d\n", numFramesToEncode);
+        pprintf("  Total Encode Time  : %6.2f (sec)\n", total_encode_time[encoderID] / 1000.0f );
+        pprintf("  Average Time/Frame : %6.2f (ms)\n",  total_encode_time[encoderID] / numFramesToEncode );
+        pprintf("  Average Frame Rate : %4.2f (fps)\n", numFramesToEncode * 1000.0f / total_encode_time[encoderID]);
 
         sdkDeleteTimer(&timer[encoderID]);
 
