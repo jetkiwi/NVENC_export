@@ -2028,6 +2028,12 @@ prMALError exSDKExport( // used by selector exSelExport
 		//    which is written to the first 20-30 bytes of file
 		result = WriteSDK_WAVHeader(stdParmsP, exportInfoP, exportDuration);
 
+		// If header creation failed, then quit now.
+		if ( result != malNoError ) {
+			CloseHandle( mySettings->SDKFileRec.FileRecord_Audio.hfp );
+			return result; // exportAudio encountered an error, abort now
+		}
+
 		// (2) Now render the remaining audio
 		result = RenderAndWriteAllAudio(exportInfoP, exportDuration);
 
@@ -2039,6 +2045,9 @@ prMALError exSDKExport( // used by selector exSelExport
 		CloseHandle( mySettings->SDKFileRec.FileRecord_Audio.hfp );
 	} // exportAudio
 
+	// Verify the exportAudio operation succeeded.  If it failed, then quit now.
+	if ( result != malNoError )
+		return result; // exportAudio encountered an error, abort now
 
 	//
 	// kludge: AAC-audio requires execution of external third-party app: neroAacenc.exe

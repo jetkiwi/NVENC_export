@@ -128,6 +128,7 @@ void queryAllEncoderCaps(CNvEncoder *pEncoder, string &s)
         QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
         QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_PREPROC_SUPPORT);
         QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
+		//QUERY_PRINT_CAPS(pEncoder, NV_ENC_CAPS_MB_NUM_MAX); // error in driver 320.79
     }
 
 	s = os.str();
@@ -610,43 +611,33 @@ int main(const int argc, char *argv[])
                 stEncodeFrame.height = nvEncoderConfig[encoderID].height;
 				unsigned fbbase = (frameCount % FRAME_QUEUE) * stEncodeFrame.width * stEncodeFrame.height;
 
-                if ( nvEncoderConfig[encoderID].FieldEncoding != NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME && (!oDecodedDispInfo.progressive_frame) ) {
-					// Non frame encoding mode:  MBAFF or Interlaced
-                    stEncodeFrame.fieldPicflag = true;
-					bTopField     = oDecodedDispInfo.top_field_first;
-
-					// encode 2 or 3 fields (depending on repeat_first_field flag)
-                    for (int field = 0; field < 2; field++) {
-//                    for (int field = 0; field < (2 + oDecodedDispInfo.repeat_first_field); field++) {
-						unsigned half_offset = 0; //bTopField ? 0 : stEncodeFrame.width;
-                        stEncodeFrame.yuv[0] = &yuv[0][ (fbbase + half_offset) ]; // Y-plane
-                        stEncodeFrame.yuv[1] = &yuv[1][ (fbbase + half_offset) >> 2];// U
-                        stEncodeFrame.yuv[2] = &yuv[2][ (fbbase + half_offset) >> 2];// V
-                        stEncodeFrame.topField = bTopField;
-
-                        pEncoder[encoderID]->EncodeCudaMemFrame(&stEncodeFrame,oDecodedFrame,false);// source videoFrame is in DeviceMem
-//                        pEncoder[encoderID]->EncodeFrame(&stEncodeFrame, false);// source videoFrame is in sysmem
-                        bTopField = !bTopField;
-                    }
-                    // tell the Cuda video-decoder that the Decoded-Frames are no longer needed.
-                    // (Frees them up to be re-used.)
-                    pVideoDecode[encoderID]->GetFrameFinish( &oDecodedDispInfo, oDecodedFrame);
-                }
-                else {
+				if ( nvEncoderConfig[encoderID].FieldEncoding == NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME ) {
 					// frame encoding mode
-					stEncodeFrame.fieldPicflag = false;
-					stEncodeFrame.topField = true;
-                    stEncodeFrame.yuv[0] = &yuv[0][ fbbase ];
-                    stEncodeFrame.yuv[1] = &yuv[1][ fbbase >> 2];
-                    stEncodeFrame.yuv[2] = &yuv[2][ fbbase >> 2];
+					stEncodeFrame.fieldPicflag = false;  // progressive-scan frame
+					stEncodeFrame.topField = false;       // not used
+				}
+				else {
+					// (field or MBAFF) encoding mode
+					// In interlaced-encoding mode, fieldPicflag must always be set to true,
+					//    even when passing a progressive-frame.
+					stEncodeFrame.fieldPicflag = true;
+					stEncodeFrame.topField = oDecodedDispInfo.top_field_first;
+					//
+					//  rff - NOT SUPPORTED YET! 
+					//if ( oDecodedDispInfo.repeat_first_field )
+				}
 
-                    //pEncoder[encoderID]->EncodeFrame(&stEncodeFrame, false);
-                    pEncoder[encoderID]->EncodeCudaMemFrame(&stEncodeFrame,oDecodedFrame,false);
+                stEncodeFrame.yuv[0] = &yuv[0][ fbbase ];
+                stEncodeFrame.yuv[1] = &yuv[1][ fbbase >> 2];
+                stEncodeFrame.yuv[2] = &yuv[2][ fbbase >> 2];
 
-                    // tell the Cuda video-decoder that the Decoded-Frames are no longer needed.
-                    // (Frees them up to be re-used.)
-                    pVideoDecode[encoderID]->GetFrameFinish( &oDecodedDispInfo, oDecodedFrame);
-                }
+                //pEncoder[encoderID]->EncodeFrame(&stEncodeFrame, false);
+                pEncoder[encoderID]->EncodeCudaMemFrame(&stEncodeFrame,oDecodedFrame,false);
+
+                // tell the Cuda video-decoder that the Decoded-Frames are no longer needed.
+                // (Frees them up to be re-used.)
+                pVideoDecode[encoderID]->GetFrameFinish( &oDecodedDispInfo, oDecodedFrame);
+
                 if (nvAppEncoderParams.maxNumberEncoders > 1) {
                     printf("[%d]%d, ", encoderID, frameCount);
                 } else {

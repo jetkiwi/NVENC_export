@@ -1,7 +1,7 @@
 {\rtf1\ansi\ansicpg1252\deff0\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil\fcharset0 Courier New;}{\f2\fnil\fcharset0 Consolas;}{\f3\fnil Consolas;}{\f4\fnil\fcharset2 Symbol;}}
 {\*\generator Msftedit 5.41.21.2510;}\viewkind4\uc1\pard\sa200\sl276\slmult1\qc\lang9\f0\fs32 Experimental NVENC H264 encoder plugin\fs22  \par
 for Adobe Premiere Pro CS6 (Windows version)\par
-\pard\sa200\sl276\slmult1\tab\tab\tab\tab\tab\tab Sep 6, 2013\par
+\pard\sa200\sl276\slmult1\tab\tab\tab\tab\tab\tab Dec 13, 2013\par
 \par
 \pard\sa200\sl276\slmult1\qc\b\i *NVENC-plugin is third-party software that is not supported or distributed by Adobe or NVidia.  It comes with no warranty, use at your own risk!\par
 \pard\sa200\sl276\slmult1\b0\i0\par
@@ -12,13 +12,13 @@ Since the license-key is commercially distributed by NVidia, the source package 
 \pard\li720\sa200\sl276\slmult1 This package only contains the C++ source-code for the NVENC-plugin.\par
 Besides the source-code, you will also need the following:\par
 \pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li1440\sa200\sl276\slmult1 Adobe Premiere CS6 SDK \par
-{\pntext\f4\'B7\tab}*Microsoft Visual C++ 2012 Update 3 Professional edition (or higher)\par
+{\pntext\f4\'B7\tab}*Microsoft Visual C++ 2012 Update 4 Professional edition (or higher)\par
 {\pntext\f4\'B7\tab}NVidia Cuda SDK 5.5\par
 {\pntext\f4\'B7\tab}Microsoft DirectX 11 SDK (June 2010)\par
-{\pntext\f4\'B7\tab}NVidia NVENC SDK Public Release 2.0 [note: nvenc_export was built using the Beta 2.0 SDK]\par
+{\pntext\f4\'B7\tab}NVidia NVENC SDK Public Release 3.0\par
 {\pntext\f4\'B7\tab}private NVENC client license key (obtained from NVidia)\par
-\pard\li720\sa200\sl276\slmult1 With the exception of the NVENC-license key, all items can be obtained free of charge. (To get Visual Studio Pro free of charge, search Microsoft's website for 'Websitespark' or 'Business spark')\par
-(For convenience, the source-package also all necessary include-files from the Adobe CS6 SDK and NVENC Beta 2.0 SDK, so you only need the SDK-packages for the API-documentation.)\par
+\pard\li720\sa200\sl276\slmult1 With the exception of the NVENC-license key, all items can be obtained free of charge. (To get Visual Studio Pro free of charge, search Microsoft's website for 'Business spark' or 'Dreamspark')\par
+(For convenience, the source-package also all necessary include-files from the Adobe CS6 SDK and NVENC 3.0 SDK, so you only need the SDK-packages for the API-documentation.)\par
 \par
 The source-package contains several different modules:\par
 \pard\sa200\sl276\slmult1\par
@@ -132,6 +132,10 @@ If validation succeeds, then the export-operation begins.  First, the plugin wil
 \pard\li720\sa200\sl276\slmult1 This package contains source-code owned by \i NVidia Corporation \i0 and \i Adobe Corporation\i0 .  Their licensing terms apply to any code owned by them.\par
 NVENC-plugin original code (i.e. code not derived from NVidia/Adobe) is distributed under the terms of the \ul\b Lesser GPL\ulnone\b0  (LGPL) license.\par
 \pard\sa200\sl276\slmult1\ul Revision history\ulnone\par
+\pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1 Dec 13, 2013 - fix hang in Premiere Elements 12, caused by nvenc_export requesting an incompatible audioChannelType (such as requesting 5.1-audio from a stereo project.)  Now, nvenc_export will print an error dialog and abort.   (Premiere Elements 12 supports the PushMode export-API, and fixes the performance problems experienced by Elements 11.)\par
+{\pntext\f4\'B7\tab}Dec 7, 2013 - upgrade nvEncodeAPI.h to API version 3.0 (from the NVENC Beta 3.0 SDK, Aug 2013)\par
+\pard\li720\sa200\sl276\slmult1 Note, some of the presets and rateControl modes previously available in NVENCAPI  2.0 have been changed in 3.0.\par
+nvEncode2 project: Add new command-line option '-enableVFR'; enables variable frame rate encoding (not sure if Geforce driver actually does anything with this)\par
 \pard{\pntext\f4\'B7\tab}{\*\pn\pnlvlblt\pnf4\pnindent0{\pntxtb\'B7}}\fi-360\li720\sa200\sl276\slmult1 Sep 6, 2013 - add interlaced-video encoding, fix output filename bugs introduced by previous release,\par
 \pard\li720\sa200\sl276\slmult1 attempted (but FAILED) to add a 'pipe-mode' for AAC-encoding.  This would have eliminated the *.WAV intermediate audio file by having NeroAacEnc.exe accept audio from <stdin>, and having nvenc_export pipe the wav-output to NeroAacEnc.exe's <stdin> pipe.\par
 Added source-code for dependent project /cudaDecodeD3D9 (this isn't used by nvenc_export, but is needed by the command-prompt encoder "nvEncode2")\par

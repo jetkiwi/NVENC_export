@@ -34,6 +34,7 @@ protected:
 public:
     virtual HRESULT                                      InitializeEncoder();
     virtual HRESULT                                      InitializeEncoderH264( NV_ENC_CONFIG_H264_VUI_PARAMETERS *pvui );
+	virtual HRESULT                                      ReconfigureEncoder(EncodeConfig EncoderReConfig);
     virtual HRESULT                                      EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush=false);
 	virtual HRESULT                                      EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const bool bFlush=false);
     virtual HRESULT                                      EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUdeviceptr oFrame[], bool bFlush=false);

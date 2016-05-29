@@ -1468,7 +1468,9 @@ prMALError RenderAndWriteAllAudio(
 
 	PrSDKMemoryManagerSuite	*memorySuite	= mySettings->memorySuite;
 	PrSDKTimeSuite			*timeSuite		= mySettings->timeSuite;
+	PrSDKExportInfoSuite	*exportInfoSuite= mySettings->exportInfoSuite;
 	PrTime					ticksPerSample	= 0;
+	PrParam					srcChannelType;
 
 	PrSDKExportParamSuite	*paramSuite	= mySettings->exportParamSuite;
 	paramSuite->GetParamValue(exID, 0, ADBEVideoFPS, &ticksPerFrame);
@@ -1476,21 +1478,39 @@ prMALError RenderAndWriteAllAudio(
 	paramSuite->GetParamValue(exID, 0, ADBEAudioNumChannels, &channelType);
 	audioChannelsL = GetNumberOfAudioChannels (channelType.value.intValue);
 
+	// get the #audio-channels from the export-source
+	exportInfoSuite->GetExportSourceInfo( exID,
+											kExportInfo_AudioChannelsType,
+											&srcChannelType);
+	// kludge - TODO we don't support 16-channel audio,
+	//          so switch 16-channel to 5.1 audio
+	if ( srcChannelType.mInt32 >= kPrAudioChannelType_16Channel )
+		srcChannelType.mInt32 = kPrAudioChannelType_51;
+
+//	bool audioformat_incompatible = 
+//	 ( srcChannelType.mInt32 == kPrAudioChannelType_51 && (audioChannelsL > 6)) ||
+//	 ( srcChannelType.mInt32 == kPrAudioChannelType_Stereo && (audioChannelsL > 2)) ||
+//	 ( srcChannelType.mInt32 == kPrAudioChannelType_Mono && (audioChannelsL > 1));
+
 	timeSuite->GetTicksPerAudioSample ((float)sampleRate.value.floatValue, &ticksPerSample);
-	
-	mySettings->sequenceAudioSuite->MakeAudioRenderer(	exID,
+
+	prSuiteError serr = mySettings->sequenceAudioSuite->MakeAudioRenderer(	exID,
 														exportInfoP->startTime,
 														(PrAudioChannelType)channelType.value.intValue,
 														kPrAudioSampleType_32BitFloat,
 														(float)sampleRate.value.floatValue,
 														&audioRenderID);
 
+	bool audioformat_incompatible = ( serr == suiteError_NoError ) ? false : true;
+
 	totalAudioSamples = exportDuration / ticksPerSample;
 	samplesRemaining = totalAudioSamples;
 
 	// Find size of blip to ask for
 	// The lesser of the value returned from GetMaxBlip and number of samples remaining
-	mySettings->sequenceAudioSuite->GetMaxBlip (audioRenderID, ticksPerFrame.value.timeValue, &maxBlip);
+	if ( !audioformat_incompatible ) 
+		serr = mySettings->sequenceAudioSuite->GetMaxBlip (audioRenderID, ticksPerFrame.value.timeValue, &maxBlip);
+
 	if (maxBlip < samplesRemaining)
 	{
 		samplesRequestedL = maxBlip;
@@ -1498,6 +1518,36 @@ prMALError RenderAndWriteAllAudio(
 	else
 	{
 		samplesRequestedL = (csSDK_int32) samplesRemaining;
+	}
+
+	//   Premiere Elements 12: crashes if the output-audioformat has more channels 
+	//   than the source-audioformat.
+	//
+	//   Workaround:
+	//   Compare the source-audioformat with the selected output-audioformat,
+	//   Abort on incompatible output-format.
+	if ( maxBlip == 0 || audioformat_incompatible ) { 
+		wostringstream oss; // text scratchpad for messagebox and errormsg 
+		prUTF16Char title[256];
+		prUTF16Char desc[256];
+		HWND mainWnd = mySettings->windowSuite->GetMainWindow();
+
+		copyConvertStringLiteralIntoUTF16( L"NVENC-export error: AUDIO", title );
+		oss << "There was a problem with exporting Audio:" << endl << endl;
+		oss << "The source and output audio channels are not compatible or a conversion does not exist. " << endl;
+		oss << "In the nvenc_export tab 'Audio', please reduce the #Channels and try again." << endl;
+
+		copyConvertStringLiteralIntoUTF16( oss.str().c_str(), desc );
+		mySettings->errorSuite->SetEventStringUnicode( PrSDKErrorSuite::kEventTypeError, title, desc );
+
+		MessageBoxW( GetLastActivePopup(mainWnd),
+								oss.str().c_str(),
+								EXPORTER_NAME_W,
+								MB_OK | MB_ICONERROR );
+
+		mySettings->sequenceAudioSuite->ReleaseAudioRenderer(	exID,
+															audioRenderID);
+		return exportReturn_IncompatibleAudioChannelType;
 	}
 
 	// Set temporary audio buffer size (measured in samples)

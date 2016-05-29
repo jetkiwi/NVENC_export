@@ -146,6 +146,7 @@ typedef struct {
     int value_NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION;
     int value_NV_ENC_CAPS_PREPROC_SUPPORT;
     int value_NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT;
+	int value_NV_ENC_CAPS_MB_NUM_MAX;
 } nv_enc_caps_s;
 
 typedef struct {
@@ -189,7 +190,31 @@ const param_desc ratecontrol_names[] =
     { 5,                            "Invalid Rate Control Mode"               },
     { 6,                            "Invalid Rate Control Mode"               },
     { 7,                            "Invalid Rate Control Mode"               },
-    { NV_ENC_PARAMS_RC_TWOPASS_CBR, "Two-Pass (Constant Bitrate)"             }
+    { NV_ENC_PARAMS_RC_2_PASS_QUALITY,"Two-Pass (Constant Bitrate Quality)"     },
+	{ 9,                            "Invalid Rate Control Mode"               },
+	{ 0xA,                          "Invalid Rate Control Mode"               },
+	{ 0XB,                          "Invalid Rate Control Mode"               },
+	{ 0xC,                          "Invalid Rate Control Mode"               },
+	{ 0xD,                          "Invalid Rate Control Mode"               },
+	{ 0xE,                          "Invalid Rate Control Mode"               },
+	{ 0xF,                          "Invalid Rate Control Mode"               },
+    { NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP,"Two-Pass (Constant Bitrate FCAP)"  },
+	{ 0x11,                         "Invalid Rate Control Mode"               },
+	{ 0x12,                         "Invalid Rate Control Mode"               },
+	{ 0x13,                         "Invalid Rate Control Mode"               },
+	{ 0x14,                         "Invalid Rate Control Mode"               },
+	{ 0x15,                         "Invalid Rate Control Mode"               },
+	{ 0x16,                         "Invalid Rate Control Mode"               },
+	{ 0x17,                         "Invalid Rate Control Mode"               },
+	{ 0x18,                         "Invalid Rate Control Mode"               },
+	{ 0x19,                         "Invalid Rate Control Mode"               },
+	{ 0x1A,                         "Invalid Rate Control Mode"               },
+	{ 0x1B,                         "Invalid Rate Control Mode"               },
+	{ 0x1C,                         "Invalid Rate Control Mode"               },
+	{ 0x1D,                         "Invalid Rate Control Mode"               },
+	{ 0x1E,                         "Invalid Rate Control Mode"               },
+	{ 0x1F,                         "Invalid Rate Control Mode"               },
+	{ NV_ENC_PARAMS_RC_CBR2,        "Two-pass (Constant Bitrate IDR)"         }
 };
 
 const st_guid_entry table_nv_enc_ratecontrol_names[] = {
@@ -197,16 +222,17 @@ const st_guid_entry table_nv_enc_ratecontrol_names[] = {
 	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_VBR),
 	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_CBR),
 	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_VBR_MINQP),
-	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_TWOPASS_CBR)
+	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_2_PASS_QUALITY),
+	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_2_PASS_FRAMESIZE_CAP),
+	GUID_ENTRY(NO_GUID, NV_ENC_PARAMS_RC_CBR2)
 };
 
 const param_desc encode_picstruct_names[] = 
 {
-    { 0,                              "0 = Invalid Picture Struct"        },
-    { NV_ENC_PIC_STRUCT_FRAME,        "1 = Progressive Frame"             },
-    { NV_ENC_PIC_STRUCT_TOP_FIELD,    "2 = Top Field interlaced frame"    },
-    { 3,                              "3 = Invalid Picture Struct"        },
-    { NV_ENC_PIC_STRUCT_BOTTOM_FIELD, "4 = Bottom Field interlaced frame" }
+    { 0,                                    "0 = Invalid Picture Struct"                },
+    { NV_ENC_PIC_STRUCT_FRAME,              "1 = Progressive Frame"                     },
+    { NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM,   "2 = Top Field interlaced frame"            },
+    { NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP,   "3 = Bottom Field first inerlaced frame"    },
 };
 
 /**
@@ -295,23 +321,16 @@ const guid_desc codecprofile_names[] =
 
 // Note: starting with WHQL Geforce driver 314.21, some of the PRESETs below are no longer
 //       supported.
-const guid_desc preset_names[] = 
+const guid_desc preset_names[] =
 {
-    { NV_ENC_PRESET_DEFAULT_GUID,             "Default Preset",  0},
-    { NV_ENC_PRESET_VC_GUID,                  "VC Preset", 1},
-    { NV_ENC_PRESET_WIDI_GUID,                "Wireless Display (WiDi) Preset", 2 },
-    { NV_ENC_PRESET_HP_GUID,                  "High Performance (HP) Preset", 3 },
-    { NV_ENC_PRESET_HQ_GUID,                  "High Quality (HQ) Preset", 4 },
-    { NV_ENC_PRESET_CAMERA_GUID,              "Camera Preset", 5 },
-    { NV_ENC_PRESET_BD_GUID,                  "Bluray Disc Preset", 6 },
-    { NV_ENC_PRESET_AVCHD_GUID,               "AVCHD Preset", 7 },
-    { NV_ENC_PRESET_IPOD_GUID,                "IPOD Preset", 8 },
-    { NV_ENC_PRESET_PSP_GUID,                 "Sony PSP Preset", 9 },
-    { NV_ENC_PRESET_GAME_CAPTURE_GUID,        "Game Capture Preset", 10 },
-    { NV_ENC_PRESET_CLOUD_GAMING_720p60_GUID, "Cloud Gaming 720p60 Preset", 11 },
-    { NV_ENC_PRESET_CLOUD_GAMING_720p30_GUID, "Cloud Gaming 720p30 Preset", 12 },
-    { NV_ENC_PRESET_DESKTOP_CAPTURE_GUID,     "Desktop Capture Preset", 13 },
-    { NV_ENC_PRESET_MVC_STEREO_GUID,          "Multi-View Codec (MVC) Stereo Preset",  14}
+    { NV_ENC_PRESET_DEFAULT_GUID,                               "Default Preset",  0},
+    { NV_ENC_PRESET_LOW_LATENCY_DEFAULT_GUID,                   "Low Latancy Default Preset", 1 },
+    { NV_ENC_PRESET_HP_GUID,                                    "High Performance (HP) Preset", 2},
+    { NV_ENC_PRESET_HQ_GUID,                                    "High Quality (HQ) Preset", 3 },
+    { NV_ENC_PRESET_BD_GUID,                                    "Blue Ray Preset", 4 },
+    { NV_ENC_PRESET_LOW_LATENCY_HQ_GUID,                        "Low Latancy High Quality (HQ) Preset", 5 },
+    { NV_ENC_PRESET_LOW_LATENCY_HP_GUID,                        "Low Latancy High Performance (HP) Preset", 6 }
+
 };
 
 
@@ -350,39 +369,23 @@ const st_guid_entry table_nv_enc_profile_names[] = {
 
 typedef enum
 {
-    NV_ENC_PRESET_DEFAULT  =0, // Default Preset
-    NV_ENC_PRESET_VC       =1, // VC
-    NV_ENC_PRESET_WIDI     =2, // Wireless Display (WiDi)
-    NV_ENC_PRESET_HP       =3, // High Performance (HP)
-    NV_ENC_PRESET_HQ       =4, // High Quality (HQ)
-    NV_ENC_PRESET_CAMERA   =5, // Camera Preset
-    NV_ENC_PRESET_BD       =6, // Bluray Disc
-    NV_ENC_PRESET_AVCHD    =7, // AVCHD
-    NV_ENC_PRESET_IPOD     =8, // Apple IPOD
-    NV_ENC_PRESET_PSP      =9, // Sony PSP
-    NV_ENC_PRESET_GAME_CAPTURE=10, // Game Capture
-    NV_ENC_PRESET_CLOUD_GAMING_720p60=11, // Cloud Gaming 720p60
-    NV_ENC_PRESET_CLOUD_GAMING_720p30=12, // Cloud Gaming 720p30
-    NV_ENC_PRESET_DESKTOP_CAPTURE=13, // Desktop Capture
-    NV_ENC_PRESET_MVC_STEREO=14 // Multi-View Codec (MVC) Stereo
+    NV_ENC_PRESET_DEFAULT                   =0, // Default Preset
+    NV_ENC_PRESET_LOW_LATENCY_DEFAULT       =1, // Low Latancy Default Preset", 1 },
+    NV_ENC_PRESET_HP                        =2, // High Performance (HP) Preset
+    NV_ENC_PRESET_HQ                        =3, // High Quality (HQ) Preset
+    NV_ENC_PRESET_BD                        =4, // Blue Ray Preset
+    NV_ENC_PRESET_LOW_LATENCY_HQ            =5, // Low Latancy High Quality (HQ) Preset
+    NV_ENC_PRESET_LOW_LATENCY_HP            =6  // Low Latancy High Performance (HP) Preset
 } enum_NV_ENC_PRESET;
 
 const st_guid_entry table_nv_enc_preset_names[] = {
 	GUID_ENTRY_I( NV_ENC_PRESET_DEFAULT ),
-	GUID_ENTRY_I( NV_ENC_PRESET_VC ),
-	GUID_ENTRY_I( NV_ENC_PRESET_WIDI ),
+	GUID_ENTRY_I( NV_ENC_PRESET_LOW_LATENCY_DEFAULT ),
 	GUID_ENTRY_I( NV_ENC_PRESET_HP ),
 	GUID_ENTRY_I( NV_ENC_PRESET_HQ ),
-	GUID_ENTRY_I( NV_ENC_PRESET_CAMERA ),
-	GUID_ENTRY_I( NV_ENC_PRESET_BD  ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_AVCHD ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_IPOD ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_PSP ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_GAME_CAPTURE ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_CLOUD_GAMING_720p60  ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_CLOUD_GAMING_720p30  ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_DESKTOP_CAPTURE ), 
-	GUID_ENTRY_I( NV_ENC_PRESET_MVC_STEREO )
+	GUID_ENTRY_I( NV_ENC_PRESET_BD ), 
+	GUID_ENTRY_I( NV_ENC_PRESET_LOW_LATENCY_HQ ), 
+	GUID_ENTRY_I( NV_ENC_PRESET_LOW_LATENCY_HP )
 };
 
 const st_guid_entry table_nv_enc_buffer_format_names[] = {
@@ -569,7 +572,6 @@ struct EncodeConfig
     unsigned int              initial_qpP; // initial_QP Quality: P-frame (...)
     unsigned int              initial_qpB; // initial_QP Quality: B-frame
 
-    unsigned int              bufferSize;
     NV_ENC_H264_FMO_MODE      enableFMO;   // flexible macroblock ordering (Baseline profile)
     unsigned int              application; // 0=default, 1= HP, 2= HQ, 3=VC, 4=WIDI, 5=Wigig, 6=FlipCamera, 7=BD, 8=IPOD
     FILE                     *fOutput; // file output pointer
@@ -583,6 +585,8 @@ struct EncodeConfig
     int                       stereo3dMode;
     int                       stereo3dEnable;
     int                       numSlices;
+	unsigned int              vbvBufferSize;
+    unsigned int              vbvInitialDelay;
     unsigned int              level;     // encode level setting (41 = bluray)
     unsigned int              idr_period;// I-frame don't re-use period
     NV_ENC_H264_ENTROPY_CODING_MODE vle_entropy_mode;// (high-profile only) enable CABAC
@@ -599,7 +603,6 @@ struct EncodeConfig
     unsigned int              disable_ptd;
     NV_ENC_H264_ADAPTIVE_TRANSFORM_MODE adaptive_transform_mode;
 	NV_ENC_H264_BDIRECT_MODE  bdirectMode;// 0=auto, 1=disable, 2 = temporal, 3=spatial
-    NV_ENC_PREPROC_FLAGS      preprocess;
     int                       preset;
     unsigned int              maxWidth;
     unsigned int              maxHeight;
@@ -610,6 +613,9 @@ struct EncodeConfig
     int                       disableCodecCfg;
     unsigned int              useMappedResources;// enable 
     unsigned int              max_ref_frames; // maximum #reference frames (2 required for B-frames)
+
+	//NVENC API v3.0
+	unsigned int              enableVFR; // enable variable frame rate mode
 
 	void print( string &stringout ) const;
 };
@@ -737,6 +743,7 @@ public: // temp-hack
     GUID                                                *m_stCodecPresetGUIDArray; // list of support presets
     NV_ENC_BUFFER_FORMAT                                 m_dwInputFormat;
     NV_ENC_INITIALIZE_PARAMS                             m_stInitEncParams;
+    NV_ENC_RECONFIGURE_PARAMS                            m_stReInitEncParams;
     NV_ENC_CONFIG                                        m_stEncodeConfig;
     NV_ENC_PRESET_CONFIG                                 m_stPresetConfig;
     NV_ENC_PIC_PARAMS                                    m_stEncodePicParams;

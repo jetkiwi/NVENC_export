@@ -352,6 +352,9 @@ HRESULT CNvEncoderH264::InitializeEncoderH264(NV_ENC_CONFIG_H264_VUI_PARAMETERS 
         m_stInitEncParams.encodeConfig->rcParams.initialRCQP.qpInterB = m_stEncoderInput.initial_qpB;
 
         m_stInitEncParams.encodeConfig->rcParams.rateControlMode     = (NV_ENC_PARAMS_RC_MODE)m_stEncoderInput.rateControl;
+		m_stInitEncParams.encodeConfig->rcParams.vbvBufferSize       =  m_stEncoderInput.vbvBufferSize;
+		m_stInitEncParams.encodeConfig->rcParams.vbvInitialDelay     =  m_stEncoderInput.vbvInitialDelay;
+
 
         m_stInitEncParams.encodeConfig->frameIntervalP       = m_stEncoderInput.numBFrames + 1;
         m_stInitEncParams.encodeConfig->gopLength            = (m_stEncoderInput.gopLength > 0) ?  m_stEncoderInput.gopLength : 30;
@@ -367,7 +370,6 @@ HRESULT CNvEncoderH264::InitializeEncoderH264(NV_ENC_CONFIG_H264_VUI_PARAMETERS 
         m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.outputAUD                  = m_stEncoderInput.aud_enable;
         m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.entropyCodingMode        = (m_stEncoderInput.profile > NV_ENC_H264_PROFILE_BASELINE) ? m_stEncoderInput.vle_entropy_mode : NV_ENC_H264_ENTROPY_CODING_MODE_CAVLC;
         m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.idrPeriod                = m_stInitEncParams.encodeConfig->gopLength ;
-        m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.numSliceCountMinus1      = m_stEncoderInput.numSlices > 0 ? (m_stEncoderInput.numSlices - 1) : 0;
         m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.level                    = m_stEncoderInput.level;
         m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.numTemporalLayers        = m_stEncoderInput.numlayers;
         if (m_stEncoderInput.svcTemporal)
@@ -391,6 +393,11 @@ HRESULT CNvEncoderH264::InitializeEncoderH264(NV_ENC_CONFIG_H264_VUI_PARAMETERS 
              m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.maxNumRefFrames     = m_stEncoderInput.max_ref_frames;
         if ( pvui != NULL )
             m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.h264VUIParameters = *pvui;
+
+		// NVENC API 3
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.enableVFR = m_stEncoderInput.enableVFR ? 1 : 0;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.sliceMode      = 3;
+		m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.sliceModeData  = m_stEncoderInput.numSlices;
     }
 
     // Initialize the Encoder
@@ -427,10 +434,10 @@ HRESULT CNvEncoderH264::InitializeEncoderH264(NV_ENC_CONFIG_H264_VUI_PARAMETERS 
         //      Source video displayed dimensions = 1920 x 1080 
         //      ...AllocateIOBuffers( 1920, 1088, ...);
         //
-		//   for interlaced-only mode (not MBAFF and not progressive): height is half
-		//   for all other modes: height is full
+		//   In interlaced encoding mode, the encoder receives input as a whole frames (i.e. a pair of fields),
+		//                                so the full height is still used.
 
-        unsigned int dwPicHeight = (m_stEncoderInput.FieldEncoding == NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD) ? (m_uMaxHeight >> 1) : m_uMaxHeight;
+        unsigned int dwPicHeight = m_uMaxHeight;
         int numMBs = ((m_dwFrameWidth + 15)/16) * ((dwPicHeight + 15)/16);
         int NumIOBuffers = m_stEncoderInput.numBFrames + 4 + 1;
 		/*
@@ -468,6 +475,31 @@ HRESULT CNvEncoderH264::InitializeEncoderH264(NV_ENC_CONFIG_H264_VUI_PARAMETERS 
     return hr;
 }
 
+HRESULT
+CNvEncoderH264::ReconfigureEncoder(EncodeConfig EncoderReConfig)
+{
+    // Initialize the Encoder
+    memcpy(&m_stEncoderInput ,&EncoderReConfig, sizeof(EncoderReConfig));
+    m_stInitEncParams.encodeHeight        =  EncoderReConfig.height;
+    m_stInitEncParams.encodeWidth         =  EncoderReConfig.width;
+    m_stInitEncParams.darWidth            =  EncoderReConfig.width;
+    m_stInitEncParams.darHeight           =  EncoderReConfig.height;
+
+    m_stInitEncParams.frameRateNum        =  EncoderReConfig.frameRateNum;
+    m_stInitEncParams.frameRateDen        =  EncoderReConfig.frameRateDen;
+    //m_stInitEncParams.presetGUID          = m_stPresetGUID;
+    m_stInitEncParams.encodeConfig->rcParams.maxBitRate         = EncoderReConfig.peakBitRate;
+    m_stInitEncParams.encodeConfig->rcParams.averageBitRate     = EncoderReConfig.avgBitRate;
+    m_stInitEncParams.encodeConfig->frameFieldMode              = EncoderReConfig.FieldEncoding ? NV_ENC_PARAMS_FRAME_FIELD_MODE_FIELD : NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME ;
+    m_stInitEncParams.encodeConfig->rcParams.vbvBufferSize      = EncoderReConfig.vbvBufferSize;
+    m_stInitEncParams.encodeConfig->rcParams.vbvInitialDelay    = EncoderReConfig.vbvInitialDelay;
+    m_stInitEncParams.encodeConfig->encodeCodecConfig.h264Config.disableSPSPPS = 0;
+    memcpy( &m_stReInitEncParams.reInitEncodeParams, &m_stInitEncParams, sizeof(m_stInitEncParams));
+    SET_VER(m_stReInitEncParams, NV_ENC_RECONFIGURE_PARAMS);
+    m_stReInitEncParams.resetEncoder    = true;
+    NVENCSTATUS nvStatus = m_pEncodeAPI->nvEncReconfigureEncoder(m_hEncoder, &m_stReInitEncParams);
+    return nvStatus;
+}
 
 //
 // neither nvenc_export nor nvEncode2 uses the vanilla EncodeFrame() function
@@ -627,7 +659,9 @@ HRESULT CNvEncoderH264::EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush
     m_stEncodePicParams.inputHeight = pInput->dwHeight;
     m_stEncodePicParams.outputBitstream = pOutputBitstream->hBitstreamBuffer;
     m_stEncodePicParams.completionEvent = m_bAsyncModeEncoding == true ? pOutputBitstream->hOutputEvent : NULL;
-    m_stEncodePicParams.pictureStruct = (pEncodeFrame->fieldPicflag == 2) ? (pEncodeFrame->topField ? NV_ENC_PIC_STRUCT_TOP_FIELD : NV_ENC_PIC_STRUCT_BOTTOM_FIELD): NV_ENC_PIC_STRUCT_FRAME;
+    m_stEncodePicParams.pictureStruct = (pEncodeFrame->fieldPicflag == 2) ? 
+		(pEncodeFrame->topField ? NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM: NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP): 
+		NV_ENC_PIC_STRUCT_FRAME;
     m_stEncodePicParams.codecPicParams.h264PicParams.h264ExtPicParams.mvcPicParams.viewID = pEncodeFrame->viewId;    
     m_stEncodePicParams.encodePicFlags = 0;
     m_stEncodePicParams.inputTimeStamp = 0;
@@ -636,7 +670,7 @@ HRESULT CNvEncoderH264::EncodeFrame(EncodeFrameConfig *pEncodeFrame, bool bFlush
     if(!m_stInitEncParams.enablePTD)
     {
         m_stEncodePicParams.codecPicParams.h264PicParams.refPicFlag = 1;
-        m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
+        //m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
         m_stEncodePicParams.codecPicParams.h264PicParams.displayPOCSyntax = 2*m_dwFrameNumInGOP;
         m_stEncodePicParams.pictureType = ((m_dwFrameNumInGOP % m_stEncoderInput.gopLength) == 0) ? NV_ENC_PIC_TYPE_IDR : NV_ENC_PIC_TYPE_P;
     }
@@ -757,7 +791,7 @@ HRESULT CNvEncoderH264::EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const b
 
     // encode width and height
     unsigned int dwWidth =  m_uMaxWidth; //m_stEncoderInput.width;
-    unsigned int dwHeight = pEncodeFrame->fieldPicflag ? (m_uMaxHeight >> 1) :m_uMaxHeight;//m_stEncoderInput.height;
+    unsigned int dwHeight = m_uMaxHeight;//m_stEncoderInput.height;
     // Align 32 as driver does the same
     unsigned int dwSurfWidth  = (dwWidth + 0x1f) & ~0x1f;
     unsigned int dwSurfHeight = (dwHeight + 0x1f) & ~0x1f;
@@ -927,7 +961,7 @@ HRESULT CNvEncoderH264::EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const b
     m_stEncodePicParams.outputBitstream = pOutputBitstream->hBitstreamBuffer;
     m_stEncodePicParams.completionEvent = m_bAsyncModeEncoding == true ? pOutputBitstream->hOutputEvent : NULL;
     m_stEncodePicParams.pictureStruct = pEncodeFrame->fieldPicflag ?
-		(pEncodeFrame->topField ? NV_ENC_PIC_STRUCT_TOP_FIELD : NV_ENC_PIC_STRUCT_BOTTOM_FIELD) : // interlaced picture
+		(pEncodeFrame->topField ? NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM : NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP) :
 		NV_ENC_PIC_STRUCT_FRAME;
     m_stEncodePicParams.codecPicParams.h264PicParams.h264ExtPicParams.mvcPicParams.viewID = pEncodeFrame->viewId;    
     m_stEncodePicParams.encodePicFlags = 0;
@@ -937,7 +971,7 @@ HRESULT CNvEncoderH264::EncodeFramePPro(EncodeFrameConfig *pEncodeFrame, const b
     if(!m_stInitEncParams.enablePTD)
     {
         m_stEncodePicParams.codecPicParams.h264PicParams.refPicFlag = 1;
-        m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
+        //m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
         m_stEncodePicParams.codecPicParams.h264PicParams.displayPOCSyntax = 2*m_dwFrameNumInGOP;
         m_stEncodePicParams.pictureType = ((m_dwFrameNumInGOP % m_stEncoderInput.gopLength) == 0) ? NV_ENC_PIC_TYPE_IDR : NV_ENC_PIC_TYPE_P;
     }
@@ -1040,7 +1074,7 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUde
     unsigned int lockedPitch = 0;
     // encode width and height
     unsigned int dwWidth =  m_uMaxWidth; //m_stEncoderInput.width;
-    unsigned int dwHeight = pEncodeFrame->fieldPicflag ? (m_uMaxHeight >> 1) :m_uMaxHeight;//m_stEncoderInput.height;
+    unsigned int dwHeight = m_uMaxHeight;//m_stEncoderInput.height;
     // Align 32 as driver does the same
     unsigned int dwSurfWidth  = (dwWidth + 0x1f) & ~0x1f;
     unsigned int dwSurfHeight = (dwHeight + 0x1f) & ~0x1f;
@@ -1091,9 +1125,18 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUde
     m_stEncodePicParams.inputHeight = pInput->dwHeight;
     m_stEncodePicParams.outputBitstream = pOutputBitstream->hBitstreamBuffer;
     m_stEncodePicParams.completionEvent = m_bAsyncModeEncoding == true ? pOutputBitstream->hOutputEvent : NULL;
-    m_stEncodePicParams.pictureStruct = pEncodeFrame->fieldPicflag ?
-		(pEncodeFrame->topField ? NV_ENC_PIC_STRUCT_TOP_FIELD : NV_ENC_PIC_STRUCT_BOTTOM_FIELD): // interlaced-frame
-		NV_ENC_PIC_STRUCT_FRAME; // progressive frame
+    if ( m_stEncoderInput.FieldEncoding == NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME ) {
+        // progressive-video encoding mode
+        m_stEncodePicParams.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
+	}
+	else {
+        // interlaced-video encoding mode
+        // In interlaced-mode, NVENC requires interlaced-input, even if the frames are progressive
+        // pEncodeFrame->fieldPicflag ?
+        m_stEncodePicParams.pictureStruct = pEncodeFrame->topField ? 
+            NV_ENC_PIC_STRUCT_FIELD_TOP_BOTTOM : NV_ENC_PIC_STRUCT_FIELD_BOTTOM_TOP;
+    }
+
     m_stEncodePicParams.codecPicParams.h264PicParams.h264ExtPicParams.mvcPicParams.viewID = pEncodeFrame->viewId;    
     m_stEncodePicParams.encodePicFlags = 0;
     m_stEncodePicParams.inputTimeStamp = 0;
@@ -1102,7 +1145,7 @@ HRESULT CNvEncoderH264::EncodeCudaMemFrame(EncodeFrameConfig *pEncodeFrame, CUde
     if(!m_stInitEncParams.enablePTD)
     {
         m_stEncodePicParams.codecPicParams.h264PicParams.refPicFlag = 1;
-        m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
+        //m_stEncodePicParams.codecPicParams.h264PicParams.frameNumSyntax = m_dwFrameNumInGOP;
         m_stEncodePicParams.codecPicParams.h264PicParams.displayPOCSyntax = 2*m_dwFrameNumInGOP;
         m_stEncodePicParams.pictureType = ((m_dwFrameNumInGOP % m_stEncoderInput.gopLength) == 0) ? NV_ENC_PIC_TYPE_IDR : NV_ENC_PIC_TYPE_P;
     }

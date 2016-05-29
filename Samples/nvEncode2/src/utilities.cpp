@@ -139,11 +139,14 @@ void printHelp()
     printf("   [-reportsliceoffsets=n]\n"); 
     printf("   [-enableSubFrameWrite]\n"); 
     printf("   [-adaptiveTransformMode=n]  Adaptive Transform 8x8 mode (0=Autoselect, 1=Disabled, 2=Disabled)\n\n"); 
-    printf("   [-preprocess=n]         (0=No Pre-processing, 1=Copying Only, 2=Scaling)\n");
     printf("   [-disabledeblocking]\n");
     printf("   [-disablePTD]\n"); 
     printf("   [-dynamicResChange]     (Enable Dynamic Resolution Changes)\n"); 
     printf("   [-dynamicBitrateChange] (Enable Dynamic Bitrate Changes)\n"); 
+    printf("   [-enableVFR]            (Enable Variable Frame Rate Mode)\n"); 
+	printf("   [-vbvBufferSize=n]      (default==0)\n");
+	printf("   [-vbvInitialDelay=n]    (default==0)\n");
+
 }
 
 // These are the initial parameters for the NVENC encoder
@@ -205,12 +208,12 @@ void initEncoderParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_nvEnc
         p_nvEncoderConfig->enableSubFrameWrite     = 0; // Default do not flust to memory at slice end
         p_nvEncoderConfig->adaptive_transform_mode = NV_ENC_H264_ADAPTIVE_TRANSFORM_AUTOSELECT;
         p_nvEncoderConfig->bdirectMode             = NV_ENC_H264_BDIRECT_MODE_SPATIAL;
-        p_nvEncoderConfig->preprocess              = NV_ENC_PREPROC_NONE;
         p_nvEncoderConfig->disable_deblocking      = 0;
         p_nvEncoderConfig->disable_ptd             = 0;
         p_nvEncoderConfig->useMappedResources      = 0;
         p_nvEncoderConfig->interfaceType           = NV_ENC_CUDA;  // Windows R304 (DX9 only), Windows R310 (DX10/DX11/CUDA), Linux R310 (CUDA only)
         p_nvEncoderConfig->syncMode                = 1;
+        p_nvEncoderConfig->enableVFR               = 0;
     }
 }
 
@@ -329,24 +332,29 @@ void parseCmdLineArguments(int argc, const char *argv[], EncoderAppParams *pEnco
         getCmdLineArgumentValue ( argc, (const char **)argv, "reportsliceoffsets"   , &p_nvEncoderConfig->report_slice_offsets);
         getCmdLineArgumentValue ( argc, (const char **)argv, "enableSubFrameWrite"  , &p_nvEncoderConfig->enableSubFrameWrite );
         getCmdLineArgumentValue ( argc, (const char **)argv, "adaptiveTransformMode", &p_nvEncoderConfig->adaptive_transform_mode                 );
-        getCmdLineArgumentValue ( argc, (const char **)argv, "preprocess"           , &p_nvEncoderConfig->preprocess          );
         getCmdLineArgumentValue ( argc, (const char **)argv, "syncMode"             , &p_nvEncoderConfig->syncMode            );
         getCmdLineArgumentValue ( argc, (const char **)argv, "maxNumRefFrames"      , &p_nvEncoderConfig->max_ref_frames      );
 
         p_nvEncoderConfig->disable_ptd        = checkCmdLineFlag ( argc, (const char **)argv, "disablePTD" );
         p_nvEncoderConfig->disable_deblocking = checkCmdLineFlag ( argc, (const char **)argv, "disabledeblocking"  );
         p_nvEncoderConfig->useMappedResources = checkCmdLineFlag ( argc, (const char **)argv, "useMappedResources" );
+
+		getCmdLineArgumentValue(argc, (const char **)argv, "vbvBufferSize",         &p_nvEncoderConfig->vbvBufferSize);
+		getCmdLineArgumentValue(argc, (const char **)argv, "vbvInitialDelay",       &p_nvEncoderConfig->vbvInitialDelay);
+
+		// NVENC API 3
+        p_nvEncoderConfig->enableVFR = checkCmdLineFlag ( argc, (const char **)argv, "enableVFR" );
     }
     // if peakBitrate or bufferSize are not specified, then we compute the recommended ones them
     if (p_nvEncoderConfig->peakBitRate == 0) {
         p_nvEncoderConfig->peakBitRate  = (p_nvEncoderConfig->avgBitRate * 4);
     }
-    if (p_nvEncoderConfig->bufferSize == 0) {
-        p_nvEncoderConfig->bufferSize   = (p_nvEncoderConfig->avgBitRate / 2);
-    }
+    //if (p_nvEncoderConfig->bufferSize == 0) {
+    //    p_nvEncoderConfig->bufferSize   = (p_nvEncoderConfig->avgBitRate / 2);
+    //}
     // Validate the Rate Control Parameters
     if((p_nvEncoderConfig->rateControl < NV_ENC_PARAMS_RC_CONSTQP) || 
-       (p_nvEncoderConfig->rateControl > NV_ENC_PARAMS_RC_TWOPASS_CBR))
+       (p_nvEncoderConfig->rateControl > NV_ENC_PARAMS_RC_CBR2))
     {
         p_nvEncoderConfig->rateControl = NV_ENC_PARAMS_RC_CBR;
     }
@@ -394,9 +402,14 @@ void displayEncodingParams(EncoderAppParams *pEncodeAppParams, EncodeConfig *p_n
     printf("> Video Output Codec        = %d - %s\n",      p_nvEncoderConfig[GPUID].codec, codec_names[p_nvEncoderConfig[GPUID].codec].name);
     printf("> Average Bitrate           = %d (bps/sec)\n", p_nvEncoderConfig[GPUID].avgBitRate);
     printf("> Peak Bitrate              = %d (bps/sec)\n", p_nvEncoderConfig[GPUID].peakBitRate);
-    printf("> BufferSize                = %d\n",           p_nvEncoderConfig[GPUID].bufferSize);
+    //printf("> BufferSize                = %d\n",           p_nvEncoderConfig[GPUID].bufferSize);
     printf("> Rate Control Mode         = %d - %s\n",      p_nvEncoderConfig[GPUID].rateControl, ratecontrol_names[p_nvEncoderConfig[GPUID].rateControl].name);
-    printf("> Frame Rate (Num/Denom)    = (%d/%d) %4.4f fps\n", p_nvEncoderConfig[GPUID].frameRateNum, p_nvEncoderConfig[GPUID].frameRateDen, (float)p_nvEncoderConfig[GPUID].frameRateNum/(float)p_nvEncoderConfig[GPUID].frameRateDen);
+	printf("> vbvBufferSize             = %d\n",           p_nvEncoderConfig[GPUID].vbvBufferSize);
+	printf("> vbvInitialDelay           = %d\n",           p_nvEncoderConfig[GPUID].vbvInitialDelay);
+
+    printf("> Frame Rate (Num/Denom)    = (%d/%d) %4.4f fps", p_nvEncoderConfig[GPUID].frameRateNum, p_nvEncoderConfig[GPUID].frameRateDen, (float)p_nvEncoderConfig[GPUID].frameRateNum/(float)p_nvEncoderConfig[GPUID].frameRateDen);
+	if ( p_nvEncoderConfig[GPUID].enableVFR ) printf( " (variable)" );
+	printf("\n");
     printf("> GOP Length                = %d\n",           p_nvEncoderConfig[GPUID].gopLength);
     printf("> Number of B Frames        = %d\n",           p_nvEncoderConfig[GPUID].numBFrames);
     printf("> Display Aspect Ratio X    = %d\n",           p_nvEncoderConfig[GPUID].darRatioX);

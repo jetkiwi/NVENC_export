@@ -61,7 +61,7 @@
 #include "CNvEncoder.h"
 
 #ifndef SDK_FILE_CURRENT_VERSION	
-#define SDK_FILE_CURRENT_VERSION	31			// The current file version number. When making a change
+#define SDK_FILE_CURRENT_VERSION	33			// The current file version number. When making a change
 												// to the file structure, increment this value.
 #endif
 #define SDK_FILETYPE				'SDK_'		// The four character code for our filetype
@@ -86,7 +86,7 @@
 #define SDK_10_BIT_YUV_NAME			L"Uncompressed 10-bit YUV (v410)"
 #define	SDK_RLE_NAME				L"RLE Compressed 8-bit RGB"
 
-#define	SDK_NAME					"NVidia NVENC Beta SDK 2.0 (Dec 2012) Exporter"	// This string is used in the file header
+#define	SDK_NAME					"NVidia NVENC Beta SDK 3.0 (Aug 2013) Exporter"	// This string is used in the file header
 #define	SDK_CLSS					'DTEK'		// ClassID four character code, used in the Editing Mode XML
 
 // Codec (subtype) fourCCs

@@ -176,7 +176,8 @@ NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s)
 	os << "<< It is not supported by Adobe or NVidia in any way! >>" << std::endl;
 	os << std::endl;
 	os << "NVENC_export Build date: " <<  __DATE__ << " " << __TIME__ << std::endl;
-	os << "NVIDIA NVENC SDK 2.0 Beta (Dec 2012)" << std::endl << std::endl << _MSC_VER;
+	os << "NVIDIA NVENC SDK 3.0 Beta (Aug 2013), API 0x" << std::hex << NVENCAPI_VERSION 
+	   << std::endl << std::endl;
 	QUERY_PRINT_CAP(NV_ENC_CAPS_NUM_MAX_BFRAMES);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_FIELD_ENCODING);
@@ -208,6 +209,7 @@ NVENC_GetEncoderCaps(const nv_enc_caps_s &caps, string &s)
 	QUERY_PRINT_CAP(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_PREPROC_SUPPORT);
 	QUERY_PRINT_CAP(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT);
+	//QUERY_PRINT_CAP(NV_ENC_CAPS_MB_NUM_MAX); // broken in 320.79 driver
 
 /*
 	for(unsigned i = 0; i < m_dwInputFmtCount; ++i ) {
@@ -779,8 +781,10 @@ prMALError exSDKGenerateDefaultParams(
 	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_initial_qpP, 0, MAX_POSITIVE, 22)
 	Add_NVENC_Param_int_slider( GroupID_NVENCCfg, ParamID_initial_qpB, 0, MAX_POSITIVE, 22)
 	
-//    unsigned int              bufferSize;
-	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_bufferSize, 0, MAX_POSITIVE, 0)
+//    unsigned int              vbvBufferSize;
+//    unsigned int              vbvInitialDelay;
+	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_vbvBufferSize, 0, MAX_POSITIVE, 0)
+	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_vbvInitialDelay, 0, MAX_POSITIVE, 0)
 
 //    NV_ENC_H264_FMO_MODE      enableFMO;   // flexible macroblock ordering (Baseline profile)
 	Add_NVENC_Param_int( GroupID_NVENCCfg, ParamID_NV_ENC_H264_FMO, 0, MAX_POSITIVE, NV_ENC_H264_FMO_AUTOSELECT)
@@ -836,6 +840,7 @@ prMALError exSDKGenerateDefaultParams(
 //    int                       disableCodecCfg;
 //    unsigned int              useMappedResources;// enable 
 
+	Add_NVENC_Param_bool( GroupID_NVENCCfg, ParamID_enableVFR, false)
 
 ///////////////////////////////////////////////////////////////////////////////
 // Codec Param Group
@@ -1405,6 +1410,8 @@ update_exportParamSuite_NVENCCfgGroup(
 		_ClearAndDisableParam( ParamID_numBFrames );
 		_ClearAndDisableParam( ParamID_FieldEncoding );
 		_ClearAndDisableParam( ParamID_rateControl );
+		_ClearAndDisableParam( ParamID_vbvBufferSize );
+		_ClearAndDisableParam( ParamID_vbvInitialDelay );
 		_ClearAndDisableParam( ParamID_qpI );
 		_ClearAndDisableParam( ParamID_qpP );
 		_ClearAndDisableParam( ParamID_qpB );
@@ -1417,7 +1424,6 @@ update_exportParamSuite_NVENCCfgGroup(
 		_ClearAndDisableParam( ParamID_initial_qpI );
 		_ClearAndDisableParam( ParamID_initial_qpP );
 		_ClearAndDisableParam( ParamID_initial_qpB );
-		_ClearAndDisableParam( ParamID_bufferSize );
 		_ClearAndDisableParam( ParamID_NV_ENC_H264_FMO );
 		_ClearAndDisableParam( ParamID_hierarchicalP );
 		_ClearAndDisableParam( ParamID_hierarchicalB );
@@ -1429,6 +1435,7 @@ update_exportParamSuite_NVENCCfgGroup(
 		_ClearAndDisableParam( ParamID_NV_ENC_H264_ADAPTIVE_TRANSFORM );
 		_ClearAndDisableParam( ParamID_NV_ENC_H264_BDIRECT_MODE );
 		_ClearAndDisableParam( ParamID_syncMode );
+		_ClearAndDisableParam( ParamID_enableVFR );
 
 		return;
 	}
@@ -1601,11 +1608,29 @@ update_exportParamSuite_NVENCCfgGroup(
 			!(nv_enc_caps.value_NV_ENC_CAPS_SUPPORTED_RATECONTROL_MODES & val) )
 			continue; // this rc-mode isn't supported, skip it
 
+		// NVENC 3.0 API kludge -- don't know how the '2_PASS' modes work, so skip them
+		if ( val >= NV_ENC_PARAMS_RC_2_PASS_QUALITY )
+			continue; // skip it
+
 		_AddConstrainedIntValuePair(ParamID_rateControl)
 	}
 	
 	lRec->exportParamSuite->GetParamValue(exID, 0, ParamID_rateControl, &exParamValue_temp);
 	NV_ENC_PARAMS_RC_MODE rateControl = static_cast<NV_ENC_PARAMS_RC_MODE>(exParamValue_temp.value.intValue);
+
+	////////////////////////////
+
+	// VBV bufferSize - DEFAULT == 0 (auto)
+	//    hidden if nv_enc_caps doesn't support adjustable VBV
+	_UpdateIntSliderParam( ParamID_vbvBufferSize, 0, 999, 
+		nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE ? kPrFalse : kPrTrue,
+		kPrFalse );
+
+	// VBV initialDelay - DEFAULT == 0 (auto)
+	//    hidden if nv_enc_caps doesn't support adjustable VBV
+	_UpdateIntSliderParam( ParamID_vbvInitialDelay, 0, 999, 
+		nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE ? kPrFalse : kPrTrue,
+		kPrFalse );
 
 	////////////////////////////
 
@@ -1668,12 +1693,6 @@ update_exportParamSuite_NVENCCfgGroup(
 	_UpdateIntSliderParam( ParamID_initial_qpI, 1, 99, kPrFalse, kPrTrue ); // TODO
 	_UpdateIntSliderParam( ParamID_initial_qpP, 1, 99, kPrFalse, kPrTrue );
 	_UpdateIntSliderParam( ParamID_initial_qpB, 1, 99, kPrFalse, kPrTrue );
-
-	// VBV bufferSize - DEFAULT == 0 (auto)
-	//    hidden if nv_enc_caps doesn't support adjustable VBV
-	_UpdateIntSliderParam( ParamID_bufferSize, 0, 999, 
-		nv_enc_caps.value_NV_ENC_CAPS_SUPPORT_CUSTOM_VBV_BUF_SIZE ? kPrFalse : kPrTrue,
-		kPrFalse );
 
 	////////////////////////////
 
@@ -1843,6 +1862,7 @@ update_exportParamSuite_NVENCCfgGroup(
 	//NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_CODEC, LParamID_NV_ENC_CODEC, L"Compression standard (H.264, VC-1, MPEG-2, etc.)"  );
 	CREATE_NV_ENC_PARAM_DESCRIPTOR( nv_enc_stereo_packing_mode_names )
 	*/
+	_UpdateIntParam( ParamID_enableVFR, 0, 1, kPrFalse, kPrFalse );
 
 	_UpdateIntParam( ADBEVideoWidth, 1, nv_enc_caps.value_NV_ENC_CAPS_WIDTH_MAX, kPrFalse, kPrFalse );
 	_UpdateIntParam( ADBEVideoHeight, 1, nv_enc_caps.value_NV_ENC_CAPS_HEIGHT_MAX, kPrFalse, kPrFalse );
@@ -1901,7 +1921,7 @@ update_exportParamSuite_VideoGroup(
 	// Max bitrate is used for all rate-control modes except Constant bitrate and Constant-QP
 	prBool maxbitrate_hidden = (rateControl == NV_ENC_PARAMS_RC_CONSTQP || 
 		rateControl == NV_ENC_PARAMS_RC_CBR || 
-		rateControl == NV_ENC_PARAMS_RC_TWOPASS_CBR) ?
+		rateControl == NV_ENC_PARAMS_RC_CBR2) ?
 		kPrTrue : kPrFalse;
 	//
 	// Set the slider ranges, while preserving the current value
@@ -2376,6 +2396,12 @@ TWOPASSCBR = CBR with localized 2-passes (very slow)\n\
 CONSTQP = constant Quantization-P\n\
 VBR_MINQP = variable bitrate with MinQP");
 
+	NVENC_SetParamName(lRec, exID, ParamID_vbvBufferSize, 
+		LParamID_vbvBufferSize, L"Video Buffer Size VBV(HRD) in bits (0=auto)");
+
+	NVENC_SetParamName(lRec, exID, ParamID_vbvInitialDelay, 
+		LParamID_vbvInitialDelay, L"VBV(HRD) initial delay in bits (0=auto)");
+
 	NVENC_SetParamName(lRec, exID, ParamID_qpI, 
 		LParamID_qpI, L"Constant-QP: I-frame target quality level\n\
 lower# = better quality (larger file)");
@@ -2414,9 +2440,6 @@ lower# = better quality (larger file)");
 		LParamID_initial_qpP, L"initial-QP: reference (P) frame: Quality level (lower# = better)");
 	NVENC_SetParamName(lRec, exID, ParamID_initial_qpB, 
 		LParamID_initial_qpB, L"initial-QP: bidi (B) frame: quality setting (lower# = better)");
-
-	NVENC_SetParamName(lRec, exID, ParamID_bufferSize, 
-		LParamID_bufferSize, L"Video Buffer Size VBV in bits (0=auto)");
 
 	NVENC_SetParamName(lRec, exID, ParamID_NV_ENC_H264_FMO, 
 		LParamID_NV_ENC_H264_FMO, L"Flexible Macroblock ordering mode (baseline profile only)" );
@@ -2460,6 +2483,10 @@ checkbox enabled = asynchronous mode (execute in background thread)\n\
 checkbox disabled= synchronous mode (execute in caller thread)\n\
 " );
 
+	NVENC_SetParamName(lRec, exID, ParamID_enableVFR, 
+		LParamID_enableVFR, L"enable variable frame rate\n\
+(allows NVENC to dynamically alter encoded frame-rate)\n\
+" );
 	//
 	// Multiplexer group
 	//
@@ -2769,7 +2796,7 @@ exSDKGetParamSummary (
 	bool has_vbr_video = video_rateControl.value.intValue == NV_ENC_PARAMS_RC_CBR ||
 		video_rateControl.value.intValue == NV_ENC_PARAMS_RC_VBR ||
 		video_rateControl.value.intValue == NV_ENC_PARAMS_RC_VBR_MINQP || 
-		video_rateControl.value.intValue == NV_ENC_PARAMS_RC_TWOPASS_CBR;
+		video_rateControl.value.intValue == NV_ENC_PARAMS_RC_CBR2;
 	if ( has_vbr_video ) {
 		paramSuite->GetParamValue(exporterPluginID, mgroupIndex, ADBEVideoTargetBitrate, &videoBitrate);
 		oss2 << "H264=" << std::dec << (videoBitrate.value.floatValue * 1024 )<< " Kbps";
@@ -3421,6 +3448,9 @@ NVENC_ExportSettings_to_EncodeConfig(
 
 	// the ConstQP parameters are only used in ConstQP rate-control mode
 	_AdobeParamToEncodeConfig( ParamID_rateControl, intValue, rateControl, unsigned int );
+	_AdobeParamToEncodeConfig( ParamID_vbvBufferSize, intValue, vbvBufferSize, unsigned int );
+	_AdobeParamToEncodeConfig( ParamID_vbvInitialDelay, intValue, vbvInitialDelay, unsigned int );
+
 	_AdobeParamToEncodeConfig( ParamID_qpI, intValue, qpI, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_qpP, intValue, qpP, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_qpB, intValue, qpB, unsigned int );
@@ -3443,7 +3473,6 @@ NVENC_ExportSettings_to_EncodeConfig(
 	_AdobeParamToEncodeConfig( ParamID_initial_qpP, intValue, initial_qpP, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_initial_qpB, intValue, initial_qpB, unsigned int );
 
-	_AdobeParamToEncodeConfig( ParamID_bufferSize, intValue, bufferSize, unsigned int );
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_H264_FMO, intValue, enableFMO, NV_ENC_H264_FMO_MODE );
 
 	_AdobeParamToEncodeConfig( ParamID_hierarchicalP, intValue, hierarchicalP, int );
@@ -3459,6 +3488,7 @@ NVENC_ExportSettings_to_EncodeConfig(
 	_AdobeParamToEncodeConfig( ParamID_NV_ENC_H264_BDIRECT_MODE, intValue, bdirectMode, NV_ENC_H264_BDIRECT_MODE );
 
 	_AdobeParamToEncodeConfig( ParamID_syncMode, intValue, syncMode, int );
+	_AdobeParamToEncodeConfig( ParamID_enableVFR, intValue, enableVFR, unsigned int );
 
 	_AdobeParamToEncodeConfig( ADBEVideoWidth, intValue, width, unsigned int );
 	_AdobeParamToEncodeConfig( ADBEVideoHeight, intValue, height, unsigned int );

@@ -1732,7 +1732,6 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
         p_nvEncoderConfig->disable_ptd             = 0;
         p_nvEncoderConfig->adaptive_transform_mode = NV_ENC_H264_ADAPTIVE_TRANSFORM_AUTOSELECT;
         p_nvEncoderConfig->bdirectMode             = NV_ENC_H264_BDIRECT_MODE_SPATIAL;
-        p_nvEncoderConfig->preprocess              = NV_ENC_PREPROC_NONE;
         p_nvEncoderConfig->preset           = NV_ENC_PRESET_BD; // set to BluRay disc preset
 
         p_nvEncoderConfig->syncMode                = 1; // 0==synchronous mode, 1==async mode
@@ -1740,6 +1739,11 @@ CNvEncoder::initEncoderConfig(EncodeConfig *p_nvEncoderConfig) // used by Adobe 
         p_nvEncoderConfig->disableCodecCfg  = 0;
         p_nvEncoderConfig->useMappedResources      = 0;
 		p_nvEncoderConfig->max_ref_frames   = 2; // (for High-profile: up to 4 @ 1080p, or 7 @ 720p)
+		p_nvEncoderConfig->vbvBufferSize    = 0;
+		p_nvEncoderConfig->vbvInitialDelay  = 0;
+
+		// NVENC API 3.0
+		p_nvEncoderConfig->enableVFR        = 0; // Variable Frame Rate (default=off)
     }
 }
 
@@ -1787,6 +1791,7 @@ CNvEncoder::QueryEncoderCaps( nv_enc_caps_s &nv_enc_caps )
         QUERY_NV_CAP( NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION );
         QUERY_NV_CAP( NV_ENC_CAPS_PREPROC_SUPPORT );
         QUERY_NV_CAP( NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT );
+		//QUERY_NV_CAP( NV_ENC_CAPS_MB_NUM_MAX ); // doesn't work in driver 320.79
 
 		return hresult;
 }
@@ -1809,25 +1814,25 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(width)
-	os << endl;
+	os << ",    ";
 
 	PRINT_DEC(height)
 	os << endl;
 
 	PRINT_DEC(frameRateNum)
-	os << endl;
+	os << ",    ";
 
 	PRINT_DEC(frameRateDen)
 	os << endl;
 	
 	PRINT_DEC(darRatioX)
-	os << endl;
+	os << ",    ";
 
 	PRINT_DEC(darRatioY)
 	os << endl;
 
 	if ( rateControl == NV_ENC_PARAMS_RC_CBR ||
-		rateControl == NV_ENC_PARAMS_RC_TWOPASS_CBR ||
+		rateControl == NV_ENC_PARAMS_RC_CBR2 ||
 		rateControl == NV_ENC_PARAMS_RC_VBR ||
 		rateControl ==  NV_ENC_PARAMS_RC_VBR_MINQP)
 	{
@@ -1864,18 +1869,21 @@ void EncodeConfig::print( string &stringout ) const {
 	os << " (" << s << ")";
 	os << endl;
 
-//	PRINT_DEC(qp)
-//	os << endl;
+	PRINT_DEC(vbvBufferSize)
+	os << ",    ";
+
+	PRINT_DEC(vbvInitialDelay)
+	os << endl;
 
 	// Constant-QP rate-control parameters
 	// These parameters are only used in ConstQP rate-control mode
 	if ( rateControl == NV_ENC_PARAMS_RC_CONSTQP ) {
 
 		PRINT_DEC(qpI)
-		os << endl;
+		os << ",    ";
 
 		PRINT_DEC(qpP)
-		os << endl;
+		os << ",    ";
 
 		PRINT_DEC(qpB)
 		os << endl;
@@ -1889,10 +1897,10 @@ void EncodeConfig::print( string &stringout ) const {
 
 		if ( min_qp_ena ) {
 			PRINT_DEC(min_qpI)
-			os << endl;
+			os << ",    ";
 
 			PRINT_DEC(min_qpP)
-			os << endl;
+			os << ",    ";
 
 			PRINT_DEC(min_qpB)
 			os << endl;
@@ -1904,17 +1912,14 @@ void EncodeConfig::print( string &stringout ) const {
 
 	if ( max_qp_ena ) {
 		PRINT_DEC(max_qpI)
-		os << endl;
+		os << ",    ";
 
 		PRINT_DEC(max_qpP)
-		os << endl;
+		os << ",    ";
 
 		PRINT_DEC(max_qpB)
 		os << endl;
 	}
-
-	PRINT_DEC(bufferSize) // VBV
-	os << endl;
 
 	desc_nv_enc_h264_fmo_names.value2string(enableFMO,s);
 	PRINT_DEC(enableFMO)
@@ -1927,7 +1932,7 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(hierarchicalP)
-	os << endl;
+		os << ",    ";
 
 	PRINT_DEC(hierarchicalB)
 	os << endl;
@@ -1942,7 +1947,7 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(stereo3dMode)
-	os << endl;
+	os << ",    ";
 
 	PRINT_DEC(stereo3dEnable)
 	os << endl;
@@ -2007,22 +2012,19 @@ void EncodeConfig::print( string &stringout ) const {
 	os << " (" << s << ")";
 	os << endl;
 
-	PRINT_DEC(preprocess)
-	os << endl;
-
 	desc_nv_enc_preset_names.value2string(preset, s);
 	PRINT_DEC(preset)
 	os << " (" << s << ")";
 	os << endl;
 
 	PRINT_DEC(maxWidth)
-	os << endl;
+		os << ",    ";
 
 	PRINT_DEC(maxHeight)
 	os << endl;
 
 	PRINT_DEC(curWidth)
-	os << endl;
+		os << ",    ";
 
 	PRINT_DEC(curHeight)
 	os << endl;
@@ -2040,6 +2042,9 @@ void EncodeConfig::print( string &stringout ) const {
 	os << endl;
 
 	PRINT_DEC(max_ref_frames)
+	os << endl;
+
+	PRINT_DEC(enableVFR)
 	os << endl;
 
 	stringout = os.str();

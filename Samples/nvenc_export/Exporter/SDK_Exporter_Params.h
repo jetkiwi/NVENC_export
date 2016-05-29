@@ -73,6 +73,7 @@
         MAKE_PARAM_STRING(NV_ENC_CAPS_SUPPORT_REF_PIC_INVALIDATION)
         MAKE_PARAM_STRING(NV_ENC_CAPS_PREPROC_SUPPORT)
         MAKE_PARAM_STRING(NV_ENC_CAPS_ASYNC_ENCODE_SUPPORT)
+		MAKE_PARAM_STRING(NV_ENC_CAPS_MB_NUM_MAX)
 
 #define		GroupName_TopVideo		L"Sample top-level video param group"
 #define		GroupName_VideoCodec	L"Video codec group"
@@ -145,6 +146,10 @@
 		#define LParamID_FieldEncoding L"FieldEncoding"
 		#define ParamID_rateControl "rateControl"
 		#define LParamID_rateControl L"rateControl"
+		#define ParamID_vbvBufferSize "vbvBufferSize"
+		#define LParamID_vbvBufferSize L"vbvBufferSize"
+		#define ParamID_vbvInitialDelay "vbvInitialDelay"
+		#define LParamID_vbvInitialDelay L"vbvInitialDelay"
 		#define ParamID_qpI "qpI"
 		#define LParamID_qpI L"qpI"
 		#define ParamID_qpP "qpP"
@@ -169,8 +174,6 @@
 		#define LParamID_initial_qpP L"initial_qpP"
 		#define ParamID_initial_qpB "initial_qpB"
 		#define LParamID_initial_qpB L"initial_qpB"
-		#define ParamID_bufferSize "bufferSize"
-		#define LParamID_bufferSize L"bufferSize"
 		#define ParamID_NV_ENC_H264_FMO "NV_ENC_H264_FMO"
 		#define LParamID_NV_ENC_H264_FMO L"NV_ENC_H264_FMO"
 		#define ParamID_hierarchicalP "hierarchicalP"
@@ -193,6 +196,8 @@
 		#define LParamID_NV_ENC_H264_BDIRECT_MODE L"NV_ENC_H264_BDIRECT_MODE"
 		#define ParamID_syncMode "syncMode"
 		#define LParamID_syncMode L"syncMode"
+		#define ParamID_enableVFR "enableVFR"
+		#define LParamID_enableVFR L"enableVFR"
 		#define ParamID_forced_PrPixelFormat "forced_PrPixelFormat"
 		#define LParamID_forced_PrPixelFormat L"forced_PrPixelFormat"
 
